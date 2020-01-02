@@ -105,7 +105,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_none(self) -> Result<()> {
-        Err(Error::Unimplemented("none"))
+        Ok(())
     }
 
     fn serialize_some<T>(self, value: &T) -> Result<()>
@@ -187,7 +187,25 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
-        Ok(StructSerializer { ser: self, tag: 1 })
+        match self.get_tag() {
+            Ok(tag) => {
+                let pos = self.output.len();
+                pack::get_mut_slice(&mut self.output, pack::tag_len(tag) + 1 + 4);
+
+                Ok(StructSerializer {
+                    ser: self,
+                    tag: 1,
+                    struct_pos: pos,
+                    struct_tag: tag,
+                })
+            }
+            Err(_) => Ok(StructSerializer {
+                ser: self,
+                tag: 1,
+                struct_pos: 0,
+                struct_tag: 0,
+            }),
+        }
     }
 
     fn serialize_struct_variant(
@@ -310,6 +328,8 @@ impl<'a> ser::SerializeMap for &'a mut Serializer {
 pub struct StructSerializer<'a> {
     ser: &'a mut Serializer,
     tag: u16,
+    struct_pos: usize,
+    struct_tag: u16,
 }
 
 impl<'a> ser::SerializeStruct for StructSerializer<'a> {
@@ -326,6 +346,13 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
     }
 
     fn end(self) -> Result<()> {
+        if self.struct_pos != 0 {
+            let slice_len = pack::tag_len(self.struct_tag) + 1 + 4;
+            let struct_len = self.ser.output.len() - self.struct_pos - slice_len;
+            let slice = &mut self.ser.output[self.struct_pos..(self.struct_pos + slice_len)];
+
+            pack::set_len32(self.struct_tag, struct_len, slice);
+        }
         Ok(())
     }
 }
@@ -357,26 +384,53 @@ fn test_struct() {
     use serde::Serialize;
 
     #[derive(Serialize)]
+    struct Inner {
+        v1: Option<bool>,
+        v2: Option<bool>,
+        c: char,
+    }
+
+    #[derive(Serialize)]
     struct Test {
         int: u32,
         seq: Vec<&'static str>,
+        inner: Inner,
     }
 
     let test = Test {
         int: 1,
         seq: vec!["a", "b"],
+        inner: Inner {
+            v1: Some(true),
+            v2: None,
+            c: '\n',
+        },
     };
     let expected = [
+        // int:
         0x81, // INT1 | 1
         0x01, // value: 1
+        // seq:
         0xE2, // REPEAT | 2
         0x02, 0x00, 0x00, 0x00, // len = 2
+        // "a"
         0x00, // BLK1 | 0
         0x02, // len = 2
         b'a', b'\0', // "a"
-        0x00,  // BLK1 | 0
-        0x02,  // len = 2
+        // "b"
+        0x00, // BLK1 | 0
+        0x02, // len = 2
         b'b', b'\0', // "b"
+        // inner:
+        0x43, // BLK4 | 3
+        0x04, 0x00, 0x00, 0x00, // len: 4
+        // v1:
+        0x81, // INT1 | 1
+        0x01, // value: 1
+        // v2 is skipped
+        // c:
+        0x83, // INT1 | 3
+        0x0A, // '\n'
     ];
     assert_eq!(to_bytes(&test).unwrap(), expected);
 }
