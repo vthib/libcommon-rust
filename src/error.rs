@@ -6,6 +6,9 @@ pub enum Error {
     Unimplemented(&'static str),
     MissingTag,
     UnknownLen,
+    InputTooShort,
+    InvalidEncoding,
+    TrailingCharacters,
     Custom(String),
 }
 pub type Result<T> = std::result::Result<T, Error>;
@@ -16,6 +19,9 @@ impl fmt::Display for Error {
             Error::Unimplemented(name) => write!(fmt, "serialization of {} not implemented", name),
             Error::MissingTag => write!(fmt, "{}", self.description()),
             Error::UnknownLen => write!(fmt, "{}", self.description()),
+            Error::InputTooShort => write!(fmt, "{}", self.description()),
+            Error::InvalidEncoding => write!(fmt, "{}", self.description()),
+            Error::TrailingCharacters => write!(fmt, "{}", self.description()),
             Error::Custom(msg) => msg.fmt(fmt),
         }
     }
@@ -27,12 +33,21 @@ impl StdError for Error {
             Error::Unimplemented(_) => "unimplemented serialization of type",
             Error::MissingTag => "tag is missing, only structs can be serialized",
             Error::UnknownLen => "cannot pack a sequence of unknown len",
+            Error::InputTooShort => "deserializing failed as input is too short",
+            Error::InvalidEncoding => "binary encoding invalid",
+            Error::TrailingCharacters => "trailing characters after unpacking",
             Error::Custom(msg) => msg,
         }
     }
 }
 
 impl serde::ser::Error for Error {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Error::Custom(msg.to_string())
+    }
+}
+
+impl serde::de::Error for Error {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         Error::Custom(msg.to_string())
     }

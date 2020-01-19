@@ -1,7 +1,6 @@
-mod error;
 mod pack;
 
-use error::{Error, Result};
+use super::error::{Error, Result};
 use serde::{ser, Serialize};
 
 pub struct Serializer {

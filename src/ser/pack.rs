@@ -1,3 +1,4 @@
+use crate::wire::Wire;
 use integer_encoding::VarInt;
 
 pub fn get_mut_slice(out: &mut Vec<u8>, size: usize) -> &mut [u8] {
@@ -127,16 +128,4 @@ fn set_tag(wiretype: Wire, tag: u16, out: &mut [u8]) -> &mut [u8] {
         out[2] = (tag >> 8) as u8;
         &mut out[3..]
     }
-}
-
-#[repr(u8)]
-enum Wire {
-    BLK1 = 0 << 5,
-    BLK2 = 1 << 5,
-    BLK4 = 2 << 5,
-    QUAD = 3 << 5,
-    INT1 = 4 << 5,
-    INT2 = 5 << 5,
-    INT4 = 6 << 5,
-    REPEAT = 7 << 5,
 }
