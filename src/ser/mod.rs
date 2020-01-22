@@ -26,24 +26,6 @@ impl Serializer {
     fn get_tag(&mut self) -> Result<u16> {
         self.current_tag.ok_or(Error::MissingTag)
     }
-
-    fn serialize_integer<T>(&mut self, v: T) -> Result<()>
-    where
-        T: integer_encoding::VarInt,
-    {
-        let tag = self.get_tag()?;
-
-        pack::push_integer(tag, v, &mut self.output);
-        Ok(())
-    }
-}
-
-macro_rules! serialize_integer {
-    ($t:ty, $name:ident) => {
-        fn $name(self, v: $t) -> Result<()> {
-            self.serialize_integer(v)
-        }
-    }
 }
 
 impl<'a> ser::Serializer for &'a mut Serializer {
@@ -59,17 +41,57 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     type SerializeStructVariant = Self;
 
     fn serialize_bool(self, v: bool) -> Result<()> {
-        self.serialize_integer(if v { 1 } else { 0 } as u8)
+        self.serialize_i8(if v { 1 } else { 0 })
     }
 
-    serialize_integer!(i8, serialize_i8);
-    serialize_integer!(i16, serialize_i16);
-    serialize_integer!(i32, serialize_i32);
-    serialize_integer!(i64, serialize_i64);
-    serialize_integer!(u8, serialize_u8);
-    serialize_integer!(u16, serialize_u16);
-    serialize_integer!(u32, serialize_u32);
-    serialize_integer!(u64, serialize_u64);
+    fn serialize_i8(self, v: i8) -> Result<()> {
+        let tag = self.get_tag()?;
+
+        pack::push_byte(tag, v as u8, &mut self.output);
+        Ok(())
+    }
+
+    fn serialize_u8(self, v: u8) -> Result<()> {
+        self.serialize_i32(v as i32)
+    }
+
+    fn serialize_i16(self, v: i16) -> Result<()> {
+        self.serialize_i32(v as i32)
+    }
+
+    fn serialize_u16(self, v: u16) -> Result<()> {
+        self.serialize_i32(v as i32)
+    }
+
+    fn serialize_i32(self, v: i32) -> Result<()> {
+        let tag = self.get_tag()?;
+
+        if v == 0 {
+            pack::push_byte(tag, 0, &mut self.output);
+        } else {
+            pack::push_i32(tag, v, &mut self.output);
+        }
+        Ok(())
+    }
+
+    fn serialize_u32(self, v: u32) -> Result<()> {
+        self.serialize_i64(v as i64)
+    }
+
+    fn serialize_i64(self, v: i64) -> Result<()> {
+        let tag = self.get_tag()?;
+
+        if v <= (std::i32::MAX as i64) {
+            pack::push_i32(tag, v as i32, &mut self.output);
+        } else {
+            pack::push_quad(tag, v as u64, &mut self.output);
+        }
+        Ok(())
+    }
+
+    fn serialize_u64(self, v: u64) -> Result<()> {
+        self.serialize_i64(v as i64)
+    }
 
     fn serialize_f32(self, v: f32) -> Result<()> {
         let tag = self.get_tag()?;
@@ -86,7 +108,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_char(self, v: char) -> Result<()> {
-        self.serialize_integer(v as u32)
+        self.serialize_u32(v as u32)
     }
 
     fn serialize_str(self, v: &str) -> Result<()> {

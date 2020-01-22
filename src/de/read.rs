@@ -1,7 +1,7 @@
 use crate::error::{Error, Result};
 use crate::wire::Wire;
-use integer_encoding::VarInt;
 use serde::de::Visitor;
+use std::mem::size_of;
 
 #[derive(Clone, Copy)]
 struct Header {
@@ -13,6 +13,17 @@ pub struct BinReader<'de> {
     slice: &'de [u8],
     total_read_len: usize,
     current_hdr: Option<Header>,
+}
+
+macro_rules! read_integer_method {
+    ($method:ident, $type:ty) => {
+        fn $method(&mut self) -> Result<$type> {
+            let mut arr: [u8; size_of::<$type>()] = Default::default();
+            arr.copy_from_slice(self.get_slice(size_of::<$type>())?);
+
+            Ok(<$type>::from_le_bytes(arr))
+        }
+    }
 }
 
 impl<'de> BinReader<'de> {
@@ -31,6 +42,11 @@ impl<'de> BinReader<'de> {
     pub fn get_total_read_len(&self) -> usize {
         self.total_read_len
     }
+
+    read_integer_method!(read_i8, i8);
+    read_integer_method!(read_i16, i16);
+    read_integer_method!(read_i32, i32);
+    read_integer_method!(read_i64, i64);
 
     fn skip_upto_tag(&mut self, target_tag: u16) -> Result<Header> {
         let mut hdr = match self.current_hdr.take() {
@@ -100,22 +116,22 @@ impl<'de> BinReader<'de> {
         V: Visitor<'de>,
     {
         match wire {
-            Wire::INT1 => visitor.visit_u8(u8::decode_var(self.get_slice(1)?).0),
-            Wire::INT2 => visitor.visit_u16(u16::decode_var(self.get_slice(2)?).0),
-            Wire::INT4 => visitor.visit_u32(u32::decode_var(self.get_slice(4)?).0),
-            Wire::QUAD => visitor.visit_u64(u64::decode_var(self.get_slice(8)?).0),
+            Wire::INT1 => visitor.visit_i8(self.read_i8()?),
+            Wire::INT2 => visitor.visit_i16(self.read_i16()?),
+            Wire::INT4 => visitor.visit_i32(self.read_i32()?),
+            Wire::QUAD => visitor.visit_i64(self.read_i64()?),
             _ => Err(Error::InvalidEncoding),
         }
     }
 
     pub fn read_u64(&mut self, wire: Wire) -> Result<u64> {
-        match wire {
-            Wire::INT1 => Ok(u8::decode_var(self.get_slice(1)?).0 as u64),
-            Wire::INT2 => Ok(u16::decode_var(self.get_slice(2)?).0 as u64),
-            Wire::INT4 => Ok(u32::decode_var(self.get_slice(4)?).0 as u64),
-            Wire::QUAD => Ok(u64::decode_var(self.get_slice(8)?).0),
-            _ => Err(Error::InvalidEncoding),
-        }
+        Ok(match wire {
+            Wire::INT1 => self.read_i8()? as u64,
+            Wire::INT2 => self.read_i16()? as u64,
+            Wire::INT4 => self.read_i32()? as u64,
+            Wire::QUAD => self.read_i64()? as u64,
+            _ => return Err(Error::InvalidEncoding),
+        })
     }
 
     pub fn read_f32(&mut self, wire: Wire) -> Result<f32> {
@@ -143,19 +159,19 @@ impl<'de> BinReader<'de> {
     }
 
     pub fn read_len(&mut self, wire: Wire) -> Result<usize> {
-        match wire {
-            Wire::BLK1 => Ok(u8::decode_var(self.get_slice(1)?).0 as usize),
-            Wire::BLK2 => Ok(u16::decode_var(self.get_slice(2)?).0 as usize),
-            Wire::BLK4 => Ok(u32::decode_var(self.get_slice(4)?).0 as usize),
-            Wire::QUAD => Ok(u64::decode_var(self.get_slice(8)?).0 as usize),
+        Ok(match wire {
+            Wire::BLK1 => self.read_i8()? as usize,
+            Wire::BLK2 => self.read_i16()? as usize,
+            Wire::BLK4 => self.read_i32()? as usize,
+            Wire::QUAD => self.read_i64()? as usize,
             _ => return Err(Error::InvalidEncoding),
-        }
+        })
     }
 
     pub fn read_repeated_len(&mut self, wire: Wire) -> Result<usize> {
         match wire {
-            Wire::REPEAT => Ok(u8::decode_var(self.get_slice(4)?).0 as usize),
-            _ => return Err(Error::InvalidEncoding),
+            Wire::REPEAT => Ok(self.read_i32()? as usize),
+            _ => Err(Error::InvalidEncoding),
         }
     }
 
@@ -186,12 +202,10 @@ impl<'de> BinReader<'de> {
             if byte < 30 {
                 byte as u16
             } else if byte == 30 {
-                let slice = self.get_slice(1)?;
-                slice[0] as u16
+                self.read_i8()? as u16
             } else {
                 assert!(byte == 31);
-                let slice = self.get_slice(2)?;
-                (slice[0] as u16) | ((slice[1] << 8) as u16)
+                self.read_i16()? as u16
             }
         };
 
