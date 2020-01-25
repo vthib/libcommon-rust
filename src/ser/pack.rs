@@ -87,7 +87,7 @@ fn push_le32(v: u32, out: &mut Vec<u8>) {
 }
 
 pub fn push_len(tag: u16, len: usize, out: &mut Vec<u8>) {
-    if len < std::u8::MAX as usize {
+    if len <= std::u8::MAX as usize {
         push_tag(Wire::BLK1, tag, out);
         out.push(len as u8);
     } else if len <= std::u16::MAX as usize {
@@ -95,7 +95,7 @@ pub fn push_len(tag: u16, len: usize, out: &mut Vec<u8>) {
         out.extend_from_slice(&(len as u16).to_le_bytes());
     } else {
         /* TODO: properly handle overflow */
-        assert!(len < std::u32::MAX as usize);
+        assert!(len <= std::u32::MAX as usize);
 
         push_tag(Wire::BLK4, tag, out);
         push_le32(len as u32, out);
@@ -255,5 +255,64 @@ mod tests {
                 0x7F, 0x00, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
             ],
         ); // QUAD | 31, 256, U64_MAX / 2 LE
+    }
+
+    #[test]
+    fn test_push_len() {
+        fn test(tag: u16, len: usize, expected: &[u8]) {
+            let mut vec = Vec::new();
+
+            push_len(tag, len, &mut vec);
+            assert_eq!(vec, expected);
+        }
+
+        test(0, 0, &[0x00, 0x00]); // BLK1 | 0, 0
+        test(5, 1, &[0x05, 0x01]); // BLK1 | 5, 1
+        test(5, 255, &[0x05, 0xFF]); // BLK1 | 5, 255
+        test(5, 256, &[0x25, 0x00, 0x01]); // BLK2 | 5, 256
+        test(5, 65535, &[0x25, 0xFF, 0xFF]); // BLK2 | 5, 65536
+        test(5, 65536, &[0x45, 0x00, 0x00, 0x01, 0x00]); // BLK4 | 5, 65537
+        test(5, std::u32::MAX as usize, &[0x45, 0xFF, 0xFF, 0xFF, 0xFF]);
+    }
+
+    #[test]
+    fn test_push_repeated_len() {
+        fn test(tag: u16, len: usize, expected: &[u8]) {
+            let mut vec = Vec::new();
+
+            push_repeated_len(tag, len, &mut vec);
+            assert_eq!(vec, expected);
+        }
+
+        test(0, 0, &[0xE0, 0x00, 0x00, 0x00, 0x00]); // REPEAT | 0, 0
+        test(128, 255, &[0xFE, 0x80, 0xFF, 0x00, 0x00, 0x00]); // REPEAT | 30, 128, 255
+        test(1024, 2048, &[0xFF, 0x00, 0x04, 0x00, 0x08, 0x00, 0x00]); // REPEAT | 31, 1024, 2048
+    }
+
+    #[test]
+    fn test_push_bytes() {
+        fn test(tag: u16, inp: &[u8], expected: &[u8]) {
+            let mut vec = Vec::new();
+
+            push_bytes(tag, inp, &mut vec);
+            assert_eq!(vec, expected);
+        }
+
+        test(8, &[0xDE, 0xAD], &[0x08, 0x03, 0xDE, 0xAD, 0x00]); // BLK1 | 8, 3, payload, 0
+        test(128, &[], &[0x1E, 0x80, 0x01, 0x00]); // BLK1 | 30, 1, payload, 0
+
+        let inp = vec![0xCC; 300];
+        let mut expected = Vec::new();
+        expected.extend(&[0x27, 0x2D, 0x01]); // BLK2 | 7, 301
+        expected.extend(&inp); // payload
+        expected.extend(&[0x00]); // 0
+        test(7, &inp, &expected);
+
+        let inp = vec![0xDC; 70000];
+        let mut expected = Vec::new();
+        expected.extend(&[0x47, 0x71, 0x11, 0x01, 0x00]); // BLK4 | 7, 70001
+        expected.extend(&inp); // payload
+        expected.extend(&[0x00]); // 0
+        test(7, &inp, &expected);
     }
 }
