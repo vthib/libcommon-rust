@@ -1,5 +1,24 @@
 use crate::wire::Wire;
-use integer_encoding::VarInt;
+
+// FIXME: use proc ctz
+fn required_space_for_i32(value: i32) -> u8 {
+    // compute zigzag encoding
+    dbg!(value);
+    let value = ((value >> 31) ^ (value << 1)) as u32;
+    dbg!(value);
+
+    // make sure a bit is at least set to avoid returning 0 bytes
+    let mut value = value | 1;
+
+    let mut cnt = 0;
+    while value != 0 {
+        cnt += 1;
+        value >>= 8;
+    }
+
+    dbg!(cnt);
+    cnt
+}
 
 pub fn get_mut_slice(out: &mut Vec<u8>, size: usize) -> &mut [u8] {
     let len = out.len();
@@ -13,7 +32,7 @@ pub fn push_byte(tag: u16, value: u8, out: &mut Vec<u8>) {
 }
 
 pub fn push_i32(tag: u16, value: i32, out: &mut Vec<u8>) {
-    let space = value.required_space();
+    let space = required_space_for_i32(value);
 
     match space {
         1 => {
@@ -116,5 +135,125 @@ fn set_tag(wiretype: Wire, tag: u16, out: &mut [u8]) -> &mut [u8] {
         out[0] = wiretype | 31;
         out[1..3].copy_from_slice(&tag.to_le_bytes());
         &mut out[3..]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_push_tag() {
+        fn test(w: Wire, tag: u16, expected: &[u8]) {
+            let mut vec = Vec::new();
+
+            push_tag(w, tag, &mut vec);
+            assert_eq!(vec, expected);
+        }
+
+        test(Wire::BLK1, 0, &[0x00]); // BLK1 | 0
+        test(Wire::BLK2, 9, &[0x29]); // BLK2 | 9
+        test(Wire::BLK4, 25, &[0x59]); // BLK4 | 16
+        test(Wire::QUAD, 29, &[0x7D]); // QUAD | 29
+        test(Wire::INT1, 30, &[0x9E, 0x1E]); // INT1 | 30, 30
+        test(Wire::INT2, 225, &[0xBE, 0xE1]); // INT2 | 30, 225
+        test(Wire::INT4, 255, &[0xDE, 0xFF]); // INT4 | 30, 255
+        test(Wire::REPEAT, 256, &[0xFF, 0x00, 0x01]); // REP | 31, 256 LE
+        test(Wire::BLK1, std::u16::MAX, &[0x1F, 0xFF, 0xFF]); // BLK1 | 31, 65535 LE
+    }
+
+    #[test]
+    fn test_push_byte() {
+        fn test(tag: u16, v: u8, expected: &[u8]) {
+            let mut vec = Vec::new();
+
+            push_byte(tag, v, &mut vec);
+            assert_eq!(vec, expected);
+        }
+
+        test(0, 0, &[0x80, 0x00]); // INT1 | 0, 0
+        test(130, ' ' as u8, &[0x9E, 0x82, 0x20]); // INT1 | 30, 130, 32
+        test(257, 0xFF, &[0x9F, 0x01, 0x01, 0xFF]); // INT1 | 31, 257, 0xFF
+    }
+
+    #[test]
+    fn test_push_i32() {
+        fn test(tag: u16, v: i32, expected: &[u8]) {
+            let mut vec = Vec::new();
+
+            push_i32(tag, v, &mut vec);
+            assert_eq!(vec, expected);
+        }
+
+        // value in int8 range
+        test(258, 0, &[0x9F, 0x02, 0x01, 0x00]); // INT1 | 31, 258, 0
+        test(258, -1, &[0x9F, 0x02, 0x01, 0xFF]); // INT1 | 31, 258, -1
+        test(128, 7, &[0x9E, 0x80, 0x07]); // INT1 | 30, 128, 7
+        test(128, -7, &[0x9E, 0x80, 0xF9]); // INT1 | 30, 128, -7
+        test(129, 127, &[0x9E, 0x81, 0x7F]); // INT1 | 30, 129, 127
+        test(129, -128, &[0x9E, 0x81, 0x80]); // INT1 | 30, 128, -128
+
+        // value in int16 range
+        test(129, 128, &[0xBE, 0x81, 0x80, 0x00]); // INT2 | 30, 129, 128 LE
+        test(129, -129, &[0xBE, 0x81, 0x7F, 0xFF]); // INT2 | 30, 128, -129 LE
+        test(192, 255, &[0xBE, 0xC0, 0xFF, 0x00]); // INT2 | 30, 192, 255 LE
+        test(192, 256, &[0xBE, 0xC0, 0x00, 0x01]); // INT2 | 30, 192, 256 LE
+        test(193, 32767, &[0xBE, 0xC1, 0xFF, 0x7F]); // INT2 | 30, 193, INT16_MAX LE
+        test(193, -32768, &[0xBE, 0xC1, 0x00, 0x80]); // INT2 | 30, 193, INT16_MIN LE
+
+        // value in int32 range
+        test(194, 32768, &[0xDE, 0xC2, 0x00, 0x80, 0x00, 0x00]); // INT4 | 30, 193, 32768 LE
+        test(194, -32769, &[0xDE, 0xC2, 0xFF, 0x7F, 0xFF, 0xFF]); // INT4 | 30, 193, -32769 LE
+        test(194, 32768, &[0xDE, 0xC2, 0x00, 0x80, 0x00, 0x00]); // INT4 | 30, 193, 32768 LE
+        test(194, -32769, &[0xDE, 0xC2, 0xFF, 0x7F, 0xFF, 0xFF]); // INT4 | 30, 193, -32769 LE
+        test(224, std::i32::MAX, &[0xDE, 0xE0, 0xFF, 0xFF, 0xFF, 0x7F]); // INT4 | 30, 224, I32_MAX LE
+        test(224, std::i32::MIN, &[0xDE, 0xE0, 0x00, 0x00, 0x00, 0x80]); // INT4 | 30, 224, I32_MIN LE
+    }
+
+    #[test]
+    fn test_push_quad() {
+        fn test(tag: u16, v: u64, expected: &[u8]) {
+            let mut vec = Vec::new();
+
+            push_quad(tag, v, &mut vec);
+            assert_eq!(vec, expected);
+        }
+
+        test(
+            1,
+            0,
+            &[0x61, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+        ); // QUAD | 1, 0 LE
+        test(
+            128,
+            (std::i32::MAX as u64) + 1,
+            &[0x7E, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00],
+        ); // QUAD | 30, 128, I32_MAX + 1 LE
+        test(
+            255,
+            ((std::i32::MIN as i64) - 1) as u64,
+            &[0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F, 0xFF, 0xFF, 0xFF, 0xFF],
+        ); // QUAD | 30, 255, I32_MIN - 1 LE
+        test(
+            256,
+            std::i64::MIN as u64,
+            &[
+                0x7F, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+            ],
+        ); // QUAD | 31, 256, I64_MIN LE
+        test(
+            256,
+            std::u64::MAX / 2 + 1,
+            &[
+                0x7F, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+            ],
+        ); // QUAD | 31, 256, U64_MAX / 2 LE
+        test(
+            256,
+            std::u64::MAX,
+            &[
+                0x7F, 0x00, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            ],
+        ); // QUAD | 31, 256, U64_MAX / 2 LE
     }
 }
