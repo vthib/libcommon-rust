@@ -1,5 +1,5 @@
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Wire {
     // len in 1 byte followed by payload
     BLK1 = 0 << 5,

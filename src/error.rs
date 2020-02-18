@@ -1,7 +1,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
     Unimplemented(&'static str),
     MissingTag,
