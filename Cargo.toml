@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "el",
     "serde-iop",
     "sys",
 ]
