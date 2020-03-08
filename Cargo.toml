@@ -2,4 +2,5 @@
 
 members = [
     "serde-iop",
+    "sys",
 ]

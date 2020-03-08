@@ -1,0 +1,3 @@
+[submodule "sys/lib-common"]
+	path = sys/lib-common
+	url = https://github.com/vthib/lib-common
