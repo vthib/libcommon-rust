@@ -3,9 +3,7 @@ use crate::wire::Wire;
 // FIXME: use proc ctz
 fn required_space_for_i32(value: i32) -> u8 {
     // compute zigzag encoding
-    dbg!(value);
     let value = ((value >> 31) ^ (value << 1)) as u32;
-    dbg!(value);
 
     // make sure a bit is at least set to avoid returning 0 bytes
     let mut value = value | 1;
@@ -16,7 +14,6 @@ fn required_space_for_i32(value: i32) -> u8 {
         value >>= 8;
     }
 
-    dbg!(cnt);
     cnt
 }
 

@@ -54,7 +54,6 @@ macro_rules! deserialize_int_method {
         where
             V: Visitor<'de>,
         {
-            dbg!("int");
             let wire = self.get_wire()?;
             self.reader.visit_integer(wire, visitor)
         }
@@ -77,7 +76,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         let wire = self.get_wire()?;
 
-        dbg!("bool");
         let v = self.reader.read_u64(wire)?;
         visitor.visit_bool(if v == 0 { false } else { true })
     }
@@ -146,7 +144,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        dbg!("bytes");
         let wire = self.get_wire()?;
 
         visitor.visit_borrowed_bytes(self.reader.read_bytes(wire)?)
@@ -163,7 +160,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        dbg!("opt");
         let wire = self.get_optional_wire()?;
 
         match wire {
@@ -197,7 +193,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        dbg!("seq");
         let wire = self.get_wire()?;
 
         let len = self.reader.read_repeated_len(wire)?;
@@ -239,13 +234,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        dbg!("struct");
         match self.current_tag {
             Some(_) => {
                 let wire = self.get_wire()?;
 
                 let len = self.reader.read_len(wire)?;
-                dbg!(len);
                 visitor.visit_seq(StructDeserializer::new(&mut self, Some(len)))
             }
             None => visitor.visit_seq(StructDeserializer::new(&mut self, None)),
