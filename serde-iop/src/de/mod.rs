@@ -1,5 +1,6 @@
-use serde::de::{self, DeserializeSeed, SeqAccess, Visitor};
-use serde::Deserialize;
+use serde::de::{self, DeserializeSeed, SeqAccess, Visitor, EnumAccess, VariantAccess,
+                IntoDeserializer};
+use serde::{Deserialize, forward_to_deserialize_any};
 
 mod read;
 use read::BinReader;
@@ -168,11 +169,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
-    fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        Err(Error::Unimplemented("unit"))
+        visitor.visit_unit()
     }
 
     fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
@@ -228,7 +229,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     fn deserialize_struct<V>(
         mut self,
         _name: &'static str,
-        _fields: &'static [&'static str],
+        fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value>
     where
@@ -239,9 +240,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
                 let wire = self.get_wire()?;
 
                 let len = self.reader.read_len(wire)?;
-                visitor.visit_seq(StructDeserializer::new(&mut self, Some(len)))
+                visitor.visit_seq(StructDeserializer::new(&mut self, fields.len(), Some(len)))
             }
-            None => visitor.visit_seq(StructDeserializer::new(&mut self, None)),
+            None => visitor.visit_seq(StructDeserializer::new(&mut self, fields.len(), None)),
         }
     }
 
@@ -249,12 +250,22 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self,
         _name: &'static str,
         _variants: &'static [&'static str],
-        _visitor: V,
+        visitor: V,
     ) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        Err(Error::Unimplemented("enum"))
+        // This is actually for variants, ie unions
+        let mut deserializer = match self.current_tag {
+            Some(_) => {
+                let wire = self.get_wire()?;
+
+                let len = self.reader.read_len(wire)?;
+                UnionDeserializer::new(self, Some(len))
+            }
+            None => UnionDeserializer::new(self, None),
+        };
+        visitor.visit_enum(&mut deserializer)
     }
 
     fn deserialize_identifier<V>(self, _visitor: V) -> Result<V::Value>
@@ -310,16 +321,18 @@ impl<'de, 'a> SeqAccess<'de> for SeqDeserializer<'a, 'de> {
 
 struct StructDeserializer<'a, 'de: 'a> {
     de: &'a mut Deserializer<'de>,
+    nb_fields: usize,
     struct_len: Option<usize>,
     current_tag: u16,
 }
 
 impl<'a, 'de> StructDeserializer<'a, 'de> {
-    fn new(de: &'a mut Deserializer<'de>, struct_len: Option<usize>) -> Self {
+    fn new(de: &'a mut Deserializer<'de>, nb_fields: usize, struct_len: Option<usize>) -> Self {
         let current_read_len = de.reader.get_total_read_len();
 
         StructDeserializer {
             de,
+            nb_fields,
             struct_len: struct_len.map(|v| v + current_read_len),
             current_tag: 1,
         }
@@ -337,12 +350,101 @@ impl<'de, 'a> SeqAccess<'de> for StructDeserializer<'a, 'de> {
             Some(max_len) => self.de.reader.get_total_read_len() >= max_len,
             None => self.de.reader.is_empty(),
         };
-        if stop {
+        if stop && self.nb_fields == 0 {
             return Ok(None);
         }
         self.de.current_tag.replace(self.current_tag);
         self.current_tag += 1;
+        self.nb_fields -= 1;
         seed.deserialize(&mut *self.de).map(Some)
+    }
+}
+
+/* }}} */
+/* {{{ Union */
+
+struct UnionDeserializer<'a, 'de: 'a> {
+    de: &'a mut Deserializer<'de>,
+    _union_len: Option<usize>
+}
+
+impl<'a, 'de> UnionDeserializer<'a, 'de> {
+    fn new(de: &'a mut Deserializer<'de>, union_len: Option<usize>) -> Self {
+        let current_read_len = de.reader.get_total_read_len();
+
+        UnionDeserializer {
+            de,
+            _union_len: union_len.map(|v| v + current_read_len)
+        }
+    }
+}
+
+impl<'de, 'a> de::Deserializer<'de> for &'a mut UnionDeserializer<'a, 'de> {
+    type Error = Error;
+
+    forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct map struct enum identifier ignored_any
+    }
+
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        let tag = self.de.reader.get_next_tag_value()?;
+        // TODO: map tag to index
+        self.de.current_tag.replace(tag);
+        visitor.visit_u16(tag)
+    }
+}
+
+impl<'de, 'a> EnumAccess<'de> for &'a mut UnionDeserializer<'a, 'de> {
+    type Error = Error;
+    type Variant = Self;
+
+    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
+    where
+        V: DeserializeSeed<'de>,
+    {
+        let tag = self.de.reader.get_next_tag_value()?;
+        // TODO: map tag to index
+        self.de.current_tag.replace(tag);
+        let v = seed.deserialize(tag.into_deserializer())?;
+        Ok((v, self))
+    }
+}
+
+impl<'de, 'a> VariantAccess<'de> for &'a mut UnionDeserializer<'a, 'de> {
+    type Error = Error;
+
+    fn unit_variant(self) -> Result<()> {
+        Err(Error::Unimplemented("unit variant"))
+    }
+
+    fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value>
+    where
+        T: DeserializeSeed<'de>,
+    {
+        seed.deserialize(&mut *self.de)
+    }
+
+    fn tuple_variant<V>(self, _len: usize, _visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        Err(Error::Unimplemented("tuple variant"))
+    }
+
+    fn struct_variant<V>(
+        self,
+        _fields: &'static [&'static str],
+        _visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        Err(Error::Unimplemented("struct variant"))
     }
 }
 

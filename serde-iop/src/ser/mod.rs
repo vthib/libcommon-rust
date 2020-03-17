@@ -137,7 +137,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_unit(self) -> Result<()> {
-        Err(Error::Unimplemented("unit"))
+        // FIXME: must fill output if boxed
+        Ok(())
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<()> {
@@ -163,14 +164,30 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     fn serialize_newtype_variant<T>(
         self,
         _name: &'static str,
-        _variant_index: u32,
+        variant_index: u32,
         _variant: &'static str,
-        _value: &T,
+        value: &T,
     ) -> Result<()>
     where
         T: ?Sized + Serialize,
     {
-        Err(Error::Unimplemented("newtype variant"))
+        let tag = self.get_tag()?;
+
+        /* reserve space for len */
+        let pos = self.output.len();
+        let slice_len = pack::tag_len(tag) + 1 + 4;
+        pack::get_mut_slice(&mut self.output, slice_len);
+
+        /* use tag for variant index, and pack value. */
+        self.current_tag = Some(variant_index as u16);
+        value.serialize(&mut *self)?;
+        self.current_tag = Some(tag);
+
+        /* then write length */
+        let len = self.output.len() - pos - slice_len;
+        let slice = &mut self.output[pos..(pos + slice_len)];
+        pack::set_len32(tag, len, slice);
+        Ok(())
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {

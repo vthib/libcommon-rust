@@ -63,6 +63,16 @@ impl<'de> BinReader<'de> {
         Ok(Header { wire, tag })
     }
 
+    pub fn get_next_tag_value(&mut self) -> Result<u16> {
+        if let Some(hdr) = self.current_hdr {
+            Ok(hdr.tag)
+        } else {
+            let hdr = self.read_hdr()?;
+            self.current_hdr.replace(hdr);
+            Ok(hdr.tag)
+        }
+    }
+
     fn skip_upto_tag(&mut self, target_tag: u16) -> Result<Header> {
         let mut hdr = match self.current_hdr.take() {
             Some(h) => h,
