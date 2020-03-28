@@ -1,0 +1,13 @@
+[package]
+name = "libcommon-ic"
+version = "0.1.0"
+authors = ["Vincent Thiberville <vthiberville@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+libcommon-el = { path = "../el" }
+libcommon-sys = { path = "../sys" }
+serde-iop = { path = "../serde-iop" }
+serde = { version = "1.0", features = [ "derive" ] }
+libc = "0.2"
+futures = "0.3"

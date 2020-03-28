@@ -235,6 +235,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "libcommon-ic"
+version = "0.1.0"
+dependencies = [
+ "futures 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.67 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libcommon-el 0.1.0",
+ "libcommon-sys 0.1.0",
+ "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde-iop 0.1.0",
+]
+
+[[package]]
 name = "libcommon-sys"
 version = "0.1.0"
 dependencies = [
