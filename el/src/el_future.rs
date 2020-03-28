@@ -4,6 +4,8 @@ use std::task::{Context, Poll, Waker};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use crate::el;
+use futures::executor::LocalPool;
+use futures::task::LocalSpawnExt;
 
 // {{{ Timer
 
@@ -58,13 +60,26 @@ impl Timer {
 
 // }}}
 
+pub fn exec_test_async<F>(fun: F)
+    where F: Future<Output = ()> + 'static
+{
+    let mut pool = LocalPool::new();
+    let spawner = pool.spawner();
+
+    spawner.spawn_local(fun).unwrap();
+
+    loop {
+        pool.run_until_stalled();
+        if !el::el_has_pending_events() {
+            break;
+        }
+        el::el_loop_timeout(1);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
-    use futures::executor::LocalPool;
-    use futures::task::LocalSpawnExt;
-    use crate::el;
-    use crate::el::Element;
 
     thread_local!{
         static GUARD: RefCell<bool> = RefCell::new(false);
@@ -74,28 +89,16 @@ mod tests {
     fn test_timer() {
         GUARD.with(|g| {
             g.replace_with(|&mut _g| false);
+        });
 
-            let mut pool = LocalPool::new();
-            let spawner = pool.spawner();
+        super::exec_test_async(async {
+            super::Timer::new(10, 0).await;
+            GUARD.with(|g| {
+                g.replace_with(|&mut _g| true);
+            });
+        });
 
-            spawner.spawn_local(async {
-                let mut blocker = el::Blocker::new();
-
-                super::Timer::new(10, 0).await;
-                GUARD.with(|g| {
-                    g.replace_with(|&mut _g| true);
-                });
-
-                blocker.unregister();
-            }).unwrap();
-
-            loop {
-                pool.run_until_stalled();
-                if !el::el_has_pending_events() {
-                    break;
-                }
-                el::el_loop_timeout(1);
-            }
+        GUARD.with(|g| {
             assert!(*g.borrow());
         });
     }
