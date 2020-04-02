@@ -69,8 +69,7 @@ pub fn exec_test_async<F>(fun: F)
     spawner.spawn_local(fun).unwrap();
 
     loop {
-        pool.run_until_stalled();
-        if !el::el_has_pending_events() {
+        if pool.try_run_one() {
             break;
         }
         el::el_loop_timeout(1);
