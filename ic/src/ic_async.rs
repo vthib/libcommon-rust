@@ -285,8 +285,8 @@ impl<'a> Channel<'a> {
 
     pub fn query<M, T>(&mut self, input: T::Input) -> QueryFuture<T>
     where
-        T: Rpc<'static>,
-        M: ModRpc<'static, RPC = T>,
+        T: Rpc,
+        M: ModRpc<RPC = T>,
     {
         QueryFuture::new(self, input, M::CMD, M::ASYNC)
     }
@@ -330,14 +330,14 @@ struct QueryState<T> {
 
 pub struct QueryFuture<T>
 where
-    T: Rpc<'static>,
+    T: Rpc,
 {
     state: Arc<Mutex<QueryState<T::Output>>>,
 }
 
 impl<T> Future for QueryFuture<T>
 where
-    T: Rpc<'static>,
+    T: Rpc,
 {
     type Output = Result<T::Output, error::Error>;
 
@@ -357,7 +357,7 @@ type MsgPayload<T> = Mutex<QueryState<T>>;
 
 impl<T> QueryFuture<T>
 where
-    T: Rpc<'static>,
+    T: Rpc,
 {
     pub fn new(ic: &mut Channel, input: T::Input, cmd: i32, async_: bool) -> Self {
         let msg = unsafe { sys::ic_msg_new(std::mem::size_of::<*const c_void>() as i32) };

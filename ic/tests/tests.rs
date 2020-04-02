@@ -21,13 +21,13 @@ struct HelloRes {
 }
 struct Hello {}
 
-impl<'a> Rpc<'a> for Hello {
+impl Rpc for Hello {
     type Input = HelloArg;
     type Output = HelloRes;
 }
 
 struct Module {}
-impl<'a> ModRpc<'a> for Module {
+impl ModRpc for Module {
     type RPC = Hello;
     const ASYNC: bool = false;
     const CMD: i32 = 2;

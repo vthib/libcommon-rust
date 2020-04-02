@@ -8,25 +8,25 @@ use std::os::raw::{c_uchar, c_void};
 
 // {{{ Msg
 
-pub struct Msg<'a, T>
+pub struct Msg<T>
 where
-    T: Rpc<'a>,
+    T: Rpc,
 {
     msg: *mut sys::ic_msg_t,
 
-    _cb: PhantomData<BoxCb<'a, T>>,
+    _cb: PhantomData<BoxCb<T>>,
 }
 
-type BoxCb<'a, T> = Box<dyn FnOnce(&mut Channel, Result<<T as Rpc<'a>>::Output, error::Error>)>;
+type BoxCb<T> = Box<dyn FnOnce(&mut Channel, Result<<T as Rpc>::Output, error::Error>)>;
 
-impl<'a, T> Msg<'a, T>
+impl<T> Msg<T>
 where
-    T: Rpc<'a>,
+    T: Rpc,
 {
     // Allocate enough memory to store the Rust cb */
     pub fn new<M>() -> Self
     where
-        M: ModRpc<'a, RPC = T>,
+        M: ModRpc<RPC = T>,
     {
         let msg = unsafe {
             let msg = sys::ic_msg_new(std::mem::size_of::<BoxCb<T>>() as i32);
