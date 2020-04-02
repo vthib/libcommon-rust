@@ -1,5 +1,4 @@
-use ic::error;
-use ic::ic_async::{Channel, Client, RpcRegister, Server, QueryFuture};
+use ic::ic_async::{Client, RpcRegister, Server};
 use ic::types::{ModRpc, Rpc};
 use libcommon_el as el;
 use libcommon_ic as ic;
@@ -28,23 +27,6 @@ impl ModRpc for Module {
     type RPC = Hello;
     const ASYNC: bool = false;
     const CMD: i32 = 2;
-}
-
-impl Module {
-    fn implement<'a, F>(reg: &mut RpcRegister<'a>, fun: F)
-    where
-        F: Fn(HelloArg) -> Result<HelloRes, error::Error> + 'static,
-    {
-        reg.register(Self::CMD, fun);
-    }
-
-    fn call(
-        ic: &mut Channel,
-        arg: HelloArg
-    ) -> QueryFuture<Hello>
-    {
-        QueryFuture::new(ic, arg, Self::CMD, Self::ASYNC)
-    }
 }
 
 // }}}
