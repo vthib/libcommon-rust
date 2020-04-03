@@ -1,11 +1,12 @@
 use libcommon_sys as sys;
-use std::future::Future;
+use futures::future::Future;
 use std::task::{Context, Poll, Waker};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use crate::el;
 use futures::executor::LocalPool;
 use futures::task::LocalSpawnExt;
+use std::cell::RefCell;
 
 // {{{ Timer
 
@@ -60,16 +61,29 @@ impl Timer {
 
 // }}}
 
+// XXX: There isn't really a way around this thread local as long as rust code depends on async C
+// code (for example ichannel comms).
+thread_local!{
+    static POOL: RefCell<LocalPool> = RefCell::new(LocalPool::new());
+}
+
+pub fn spawn<F>(fun: F)
+    where F: Future<Output = ()> + 'static
+{
+    POOL.with(|pool| {
+        let spawner = pool.borrow().spawner();
+
+        spawner.spawn_local(fun).unwrap();
+    });
+}
+
 pub fn exec_test_async<F>(fun: F)
     where F: Future<Output = ()> + 'static
 {
-    let mut pool = LocalPool::new();
-    let spawner = pool.spawner();
-
-    spawner.spawn_local(fun).unwrap();
+    spawn(fun);
 
     loop {
-        if pool.try_run_one() {
+        if POOL.with(|pool| pool.borrow_mut().try_run_one()) {
             break;
         }
         el::el_loop_timeout(1);
