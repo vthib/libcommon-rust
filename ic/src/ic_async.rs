@@ -4,13 +4,14 @@ use libc;
 use libcommon_sys as sys;
 use serde_iop::{from_bytes, to_bytes, Deserialize, Serialize};
 use std::collections::HashMap;
-use std::future::Future;
+use futures::future::{Future, FutureExt};
 use std::mem;
 use std::os::raw::{c_uchar, c_void};
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
+use libcommon_el::el_future;
 
 // {{{ RPC Implementation register
 
@@ -41,13 +42,14 @@ impl<'a> RpcRegister<'a> {
         }
     }
 
-    pub fn register<'b, I, O>(
+    pub fn register<'b, I, O, F>(
         &mut self,
         cmd: i32,
-        fun: impl Fn(I) -> Result<O, error::Error> + 'static,
+        fun: impl Fn(I) -> F + 'static,
     ) where
         I: Deserialize<'b>,
-        O: Serialize,
+        O: Serialize + 'static,
+        F: Future<Output = Result<O, error::Error>> + 'static,
         'a: 'b,
     {
         self.impls.insert(
@@ -55,18 +57,21 @@ impl<'a> RpcRegister<'a> {
             Box::new(move |data: &[u8], slot: u64| {
                 let input: I = from_bytes(data).unwrap();
 
-                match fun(input) {
-                    Ok(res) => {
-                        let res = to_bytes(&res).unwrap();
+                let promise = fun(input).then(move |result| async move {
+                    match result {
+                        Ok(res) => {
+                            let res = to_bytes(&res).unwrap();
 
-                        send_reply(&res, slot, sys::ic_status_t_IC_MSG_OK);
+                            send_reply(&res, slot, sys::ic_status_t_IC_MSG_OK);
+                        }
+                        Err(_e) => {
+                            let err = error::Error::Generic("rpc error".to_owned());
+                            // FIXME: reply error
+                            println!("error: {}", err);
+                        }
                     }
-                    Err(_e) => {
-                        let err = error::Error::Generic("rpc error".to_owned());
-                        // FIXME: reply error
-                        println!("error: {}", err);
-                    }
-                }
+                });
+                el_future::spawn(promise);
             }),
         );
 
@@ -317,7 +322,6 @@ fn send_reply(res: &[u8], slot: u64, status: sys::ic_status_t) {
         sys::ic_queue_for_reply(ic, msg);
     }
 }
-
 impl<'a> Drop for Channel<'a> {
     fn drop(&mut self) {
         unsafe {

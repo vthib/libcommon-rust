@@ -39,7 +39,7 @@ fn test_server_client() {
 
     let mut reg = RpcRegister::new();
 
-    Module::implement(&mut reg, |arg| {
+    Module::implement(&mut reg, |arg| async move {
         Ok(HelloRes { result: arg.value + 23 })
     });
 

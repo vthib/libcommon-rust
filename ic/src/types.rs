@@ -1,5 +1,6 @@
 use crate::error;
 use crate::ic_async::{Channel, QueryFuture, RpcRegister};
+use futures::future::Future;
 use serde_iop::{Deserialize, Serialize};
 
 pub trait Rpc {
@@ -13,10 +14,11 @@ pub trait ModRpc {
     const ASYNC: bool;
     const CMD: i32;
 
-    fn implement<F>(reg: &mut RpcRegister<'static>, fun: F)
+    fn implement<F, Fut>(reg: &mut RpcRegister<'static>, fun: F)
     where
-        F: Fn(<Self::RPC as Rpc>::Input) -> Result<<Self::RPC as Rpc>::Output, error::Error>
-            + 'static,
+        F: Fn(<Self::RPC as Rpc>::Input) -> Fut + 'static,
+        Fut: Future<Output = Result<<Self::RPC as Rpc>::Output, error::Error>> + 'static,
+        <Self::RPC as Rpc>::Output: 'static
     {
         reg.register(Self::CMD, fun);
     }

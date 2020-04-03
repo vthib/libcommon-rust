@@ -61,18 +61,28 @@ impl Timer {
 
 // }}}
 
+struct ElPool {
+    pool: LocalPool,
+    // FIXME: this is required because it is impossible to know if the local pool is empty
+    // otherwise... Using FuturesUnordered directly could solve this.
+    nb_tasks: u32,
+}
+
 // XXX: There isn't really a way around this thread local as long as rust code depends on async C
 // code (for example ichannel comms).
 thread_local!{
-    static POOL: RefCell<LocalPool> = RefCell::new(LocalPool::new());
+    static POOL: RefCell<ElPool> = RefCell::new(ElPool { pool: LocalPool::new(), nb_tasks: 0 });
 }
 
 pub fn spawn<F>(fun: F)
     where F: Future<Output = ()> + 'static
 {
     POOL.with(|pool| {
-        let spawner = pool.borrow().spawner();
+        let mut pool = pool.borrow_mut();
 
+        pool.nb_tasks += 1;
+
+        let spawner = pool.pool.spawner();
         spawner.spawn_local(fun).unwrap();
     });
 }
@@ -83,7 +93,15 @@ pub fn exec_test_async<F>(fun: F)
     spawn(fun);
 
     loop {
-        if POOL.with(|pool| pool.borrow_mut().try_run_one()) {
+        let nb_tasks = POOL.with(|pool| {
+            let mut pool = pool.borrow_mut();
+
+            if pool.pool.try_run_one() {
+                pool.nb_tasks -= 1;
+            }
+            pool.nb_tasks
+        });
+        if nb_tasks == 0 {
             break;
         }
         el::el_loop_timeout(1);
