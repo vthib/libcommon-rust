@@ -17,7 +17,7 @@ use std::task::{Context, Poll, Waker};
 pub struct RpcRegister<'a> {
     map: sys::qm_ic_cbs_t,
 
-    impls: HashMap<i32, Box<dyn Fn(&'a [u8]) -> Result<Vec<u8>, error::Error> + 'a>>,
+    impls: HashMap<i32, Box<dyn Fn(&'a [u8], u64)>>,
 }
 
 impl<'a> RpcRegister<'a> {
@@ -41,19 +41,31 @@ impl<'a> RpcRegister<'a> {
         }
     }
 
-    pub fn register<I, O>(&mut self, cmd: i32, fun: impl Fn(I) -> Result<O, error::Error> + 'static)
-    where
-        I: Deserialize<'a>,
+    pub fn register<'b, I, O>(
+        &mut self,
+        cmd: i32,
+        fun: impl Fn(I) -> Result<O, error::Error> + 'static,
+    ) where
+        I: Deserialize<'b>,
         O: Serialize,
+        'a: 'b,
     {
         self.impls.insert(
             cmd,
-            Box::new(move |data: &[u8]| {
+            Box::new(move |data: &[u8], slot: u64| {
                 let input: I = from_bytes(data).unwrap();
 
                 match fun(input) {
-                    Ok(res) => Ok(to_bytes(&res).unwrap()),
-                    Err(_e) => Err(error::Error::Generic("rpc error".to_owned())),
+                    Ok(res) => {
+                        let res = to_bytes(&res).unwrap();
+
+                        send_reply(&res, slot, sys::ic_status_t_IC_MSG_OK);
+                    }
+                    Err(_e) => {
+                        let err = error::Error::Generic("rpc error".to_owned());
+                        // FIXME: reply error
+                        println!("error: {}", err);
+                    }
                 }
             }),
         );
@@ -77,25 +89,18 @@ impl<'a> RpcRegister<'a> {
     ) {
         let ic = Channel::from_raw(ic);
 
-        let res = match ic.register.as_ref().and_then(|reg| reg.impls.get(&cmd)) {
+        match ic.register.as_ref().and_then(|reg| reg.impls.get(&cmd)) {
             Some(cb) => {
                 let data = std::slice::from_raw_parts(
                     data.__bindgen_anon_1.s as *const c_void as *const u8,
                     data.len as usize,
                 );
 
-                (cb)(&data)
+                (cb)(&data, slot);
             }
-            None => Err(error::Error::Generic(format!(
-                "unimplemented RPC with cmd {}",
-                cmd
-            ))),
-        };
-        match res {
-            Ok(r) => {
-                ic.reply(&r, slot, sys::ic_status_t_IC_MSG_OK);
-            }
-            Err(err) => {
+            None => {
+                let err = error::Error::Generic(format!("unimplemented RPC with cmd {}", cmd));
+                // FIXME: reply error
                 println!("error: {}", err);
             }
         };
@@ -290,25 +295,26 @@ impl<'a> Channel<'a> {
     {
         QueryFuture::new(self, input, M::CMD, M::ASYNC)
     }
+}
 
-    pub fn reply(&mut self, res: &[u8], slot: u64, status: sys::ic_status_t) {
-        let mut ic = self.to_raw();
-        let msg = unsafe { sys::ic_msg_new_for_reply(&mut ic as *mut _, slot, status as i32) };
+// TODO: by distinguishing async from std RPC impls, we could provide the ic if possible.
+fn send_reply(res: &[u8], slot: u64, status: sys::ic_status_t) {
+    let mut ic = std::ptr::null_mut();
+    let msg = unsafe { sys::ic_msg_new_for_reply(&mut ic as *mut _, slot, status as i32) };
 
-        let mut data = Vec::new();
-        data.resize(12, 0);
-        data.extend_from_slice(res);
-        let mut data = data.into_boxed_slice();
+    let mut data = Vec::new();
+    data.resize(12, 0);
+    data.extend_from_slice(res);
+    let mut data = data.into_boxed_slice();
 
-        unsafe {
-            (*msg).dlen = data.len() as u32;
-            (*msg).data = data.as_mut_ptr() as *mut c_void;
-        }
-        std::mem::forget(data);
+    unsafe {
+        (*msg).dlen = data.len() as u32;
+        (*msg).data = data.as_mut_ptr() as *mut c_void;
+    }
+    std::mem::forget(data);
 
-        unsafe {
-            sys::ic_queue_for_reply(ic, msg);
-        }
+    unsafe {
+        sys::ic_queue_for_reply(ic, msg);
     }
 }
 
