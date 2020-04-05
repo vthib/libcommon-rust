@@ -16,7 +16,7 @@ pub trait ModRpc {
 
     fn implement<F, Fut>(reg: &mut RpcRegister, fun: F)
     where
-        F: Fn(<Self::RPC as Rpc>::Input) -> Fut + 'static,
+        F: Fn(Channel, <Self::RPC as Rpc>::Input) -> Fut + 'static,
         Fut: Future<Output = Result<<Self::RPC as Rpc>::Output, error::Error>> + 'static,
         <Self::RPC as Rpc>::Output: 'static
     {

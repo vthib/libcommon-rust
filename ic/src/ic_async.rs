@@ -18,7 +18,7 @@ use libcommon_el::el_future;
 pub struct RpcRegister {
     map: sys::qm_ic_cbs_t,
 
-    impls: HashMap<i32, Box<dyn Fn(&[u8], u64)>>,
+    impls: HashMap<i32, Box<dyn Fn(Channel, &[u8], u64)>>,
 }
 
 impl RpcRegister {
@@ -45,7 +45,7 @@ impl RpcRegister {
     pub fn register<'b, I, O, F>(
         &mut self,
         cmd: i32,
-        fun: impl Fn(I) -> F + 'static,
+        fun: impl Fn(Channel, I) -> F + 'static,
     ) where
         I: for<'a> Deserialize<'a>,
         O: Serialize + 'static,
@@ -53,10 +53,10 @@ impl RpcRegister {
     {
         self.impls.insert(
             cmd,
-            Box::new(move |data: &[u8], slot: u64| {
+            Box::new(move |channel: Channel, data: &[u8], slot: u64| {
                 let input: I = from_bytes(data).unwrap();
 
-                let promise = fun(input).then(move |result| async move {
+                let promise = fun(channel, input).then(move |result| async move {
                     match result {
                         Ok(res) => {
                             let res = to_bytes(&res).unwrap();
@@ -85,29 +85,46 @@ impl RpcRegister {
     }
 
     unsafe extern "C" fn call_rpc_impl(
-        ic: *mut sys::ichannel_t,
+        raw_ic: *mut sys::ichannel_t,
         slot: u64,
         cmd: i32,
         data: sys::lstr_t,
         _hdr: *const sys::ic__hdr__t,
     ) {
-        let ic = InnerClient::from_raw(ic);
+        let ic = InnerClient::from_raw(raw_ic);
 
-        match ic.register.as_ref().and_then(|reg| reg.impls.get(&cmd)) {
-            Some(cb) => {
-                let data = std::slice::from_raw_parts(
-                    data.__bindgen_anon_1.s as *const c_void as *const u8,
-                    data.len as usize,
-                );
-
-                (cb)(&data, slot);
-            }
+        let cb = match ic.register.as_mut().and_then(|reg| reg.impls.get(&cmd)) {
+            Some(cb) => cb,
             None => {
                 let err = error::Error::Generic(format!("unimplemented RPC with cmd {}", cmd));
                 // FIXME: reply error
                 println!("error: {}", err);
+                return;
             }
         };
+
+        let data = std::slice::from_raw_parts(
+            data.__bindgen_anon_1.s as *const c_void as *const u8,
+            data.len as usize,
+        );
+
+        let ic = Channel::from_raw(raw_ic);
+        (cb)(ic, &data, slot);
+       // match ic.register.as_ref().and_then(|reg| reg.impls.get(&cmd)) {
+       //     Some(cb) => {
+       //         let data = std::slice::from_raw_parts(
+       //             data.__bindgen_anon_1.s as *const c_void as *const u8,
+       //             data.len as usize,
+       //         );
+
+       //         (cb)(ic, &data, slot);
+       //     }
+       //     None => {
+       //         let err = error::Error::Generic(format!("unimplemented RPC with cmd {}", cmd));
+       //         // FIXME: reply error
+       //         println!("error: {}", err);
+       //     }
+       // };
     }
 }
 
