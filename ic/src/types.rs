@@ -4,8 +4,8 @@ use futures::future::Future;
 use serde_iop::{Deserialize, Serialize};
 
 pub trait Rpc {
-    type Input: Serialize + Deserialize<'static>;
-    type Output: Serialize + Deserialize<'static>;
+    type Input: Serialize + for<'a> Deserialize<'a>;
+    type Output: Serialize + for<'a> Deserialize<'a>;
 }
 
 pub trait ModRpc {
@@ -14,7 +14,7 @@ pub trait ModRpc {
     const ASYNC: bool;
     const CMD: i32;
 
-    fn implement<F, Fut>(reg: &mut RpcRegister<'static>, fun: F)
+    fn implement<F, Fut>(reg: &mut RpcRegister, fun: F)
     where
         F: Fn(<Self::RPC as Rpc>::Input) -> Fut + 'static,
         Fut: Future<Output = Result<<Self::RPC as Rpc>::Output, error::Error>> + 'static,

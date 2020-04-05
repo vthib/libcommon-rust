@@ -15,13 +15,13 @@ use libcommon_el::el_future;
 
 // {{{ RPC Implementation register
 
-pub struct RpcRegister<'a> {
+pub struct RpcRegister {
     map: sys::qm_ic_cbs_t,
 
-    impls: HashMap<i32, Box<dyn Fn(&'a [u8], u64)>>,
+    impls: HashMap<i32, Box<dyn Fn(&[u8], u64)>>,
 }
 
-impl<'a> RpcRegister<'a> {
+impl RpcRegister {
     pub fn new() -> Self {
         let map = unsafe {
             let mut map: sys::qm_ic_cbs_t = mem::zeroed();
@@ -47,10 +47,9 @@ impl<'a> RpcRegister<'a> {
         cmd: i32,
         fun: impl Fn(I) -> F + 'static,
     ) where
-        I: Deserialize<'b>,
+        I: for<'a> Deserialize<'a>,
         O: Serialize + 'static,
         F: Future<Output = Result<O, error::Error>> + 'static,
-        'a: 'b,
     {
         self.impls.insert(
             cmd,
@@ -131,20 +130,20 @@ unsafe fn hostname_to_su(hostname: &str) -> sys::sockunion_t {
 // }}}
 // {{{ Server
 
-struct InnerServer<'a> {
+struct InnerServer {
     el: sys::el_t,
 
-    register: Option<Rc<RpcRegister<'a>>>,
+    register: Option<Rc<RpcRegister>>,
 
-    clients: Vec<Client<'a>>,
+    clients: Vec<Client>,
 }
 
-pub struct Server<'a> {
-    _inner: Box<InnerServer<'a>>,
+pub struct Server {
+    _inner: Box<InnerServer>,
 }
 
-impl<'a> Server<'a> {
-    pub fn new(hostname: &str, register: Option<RpcRegister<'a>>) -> Self {
+impl Server {
+    pub fn new(hostname: &str, register: Option<RpcRegister>) -> Self {
         let register = match register {
             Some(r) => Some(Rc::new(r)),
             None => None,
@@ -185,7 +184,7 @@ impl<'a> Server<'a> {
     unsafe extern "C" fn on_event(_ic: *mut sys::ichannel_t, _evt: sys::ic_event_t) {}
 }
 
-impl<'a> Drop for InnerServer<'a> {
+impl Drop for InnerServer {
     fn drop(&mut self) {
         unsafe {
             sys::el_unregister(&mut self.el);
@@ -196,12 +195,12 @@ impl<'a> Drop for InnerServer<'a> {
 // }}}
 // {{{ Client
 
-pub struct Client<'a> {
-    pub ic: Box<Channel<'a>>,
+pub struct Client {
+    pub ic: Box<Channel>,
 }
 
-impl<'a> Client<'a> {
-    pub fn new(register: Option<&Rc<RpcRegister<'a>>>) -> Self {
+impl Client {
+    pub fn new(register: Option<&Rc<RpcRegister>>) -> Self {
         let mut ic = Box::new(Channel {
             raw_ic: unsafe { mem::zeroed() },
             connect_state: None,
@@ -227,15 +226,15 @@ impl<'a> Client<'a> {
 // }}}
 // {{{ Channel
 
-pub struct Channel<'a> {
+pub struct Channel {
     raw_ic: sys::ichannel_t,
 
     connect_state: Option<Arc<Mutex<ConnectState>>>,
 
-    register: Option<Rc<RpcRegister<'a>>>,
+    register: Option<Rc<RpcRegister>>,
 }
 
-impl<'a> Channel<'a> {
+impl Channel {
     pub fn from_raw<'b>(ic: *mut sys::ichannel_t) -> &'b mut Self {
         unsafe { &mut *((*ic).priv_data as *mut Self) }
     }
@@ -322,7 +321,7 @@ fn send_reply(res: &[u8], slot: u64, status: sys::ic_status_t) {
         sys::ic_queue_for_reply(ic, msg);
     }
 }
-impl<'a> Drop for Channel<'a> {
+impl Drop for Channel {
     fn drop(&mut self) {
         unsafe {
             sys::ic_wipe(&mut self.raw_ic);
