@@ -91,7 +91,7 @@ impl RpcRegister {
         data: sys::lstr_t,
         _hdr: *const sys::ic__hdr__t,
     ) {
-        let ic = Channel::from_raw(ic);
+        let ic = InnerClient::from_raw(ic);
 
         match ic.register.as_ref().and_then(|reg| reg.impls.get(&cmd)) {
             Some(cb) => {
@@ -172,16 +172,13 @@ impl Server {
 
     unsafe extern "C" fn on_accept(_ev: sys::el_t, fd: i32, data: *mut c_void) -> i32 {
         let inner: &mut InnerServer = &mut *(data as *mut InnerServer);
-        let mut ic = Client::new(inner.register.as_ref());
+        let mut client = Client::new(inner.register.as_ref());
 
-        ic.ic.raw_ic.on_event = Some(Server::on_event);
-        ic.ic.spawn(fd);
+        client.spawn(fd);
 
-        inner.clients.push(ic);
+        inner.clients.push(client);
         0
     }
-
-    unsafe extern "C" fn on_event(_ic: *mut sys::ichannel_t, _evt: sys::ic_event_t) {}
 }
 
 impl Drop for InnerServer {
@@ -195,38 +192,7 @@ impl Drop for InnerServer {
 // }}}
 // {{{ Client
 
-pub struct Client {
-    pub ic: Box<Channel>,
-}
-
-impl Client {
-    pub fn new(register: Option<&Rc<RpcRegister>>) -> Self {
-        let mut ic = Box::new(Channel {
-            raw_ic: unsafe { mem::zeroed() },
-            connect_state: None,
-            register: None,
-        });
-
-        unsafe {
-            sys::ic_init(&mut ic.raw_ic);
-
-            ic.raw_ic.set_no_autodel(true);
-            ic.raw_ic.priv_data = &mut *ic as *mut Channel as *mut c_void;
-        };
-
-        if let Some(reg) = register {
-            ic.raw_ic.impl_ = &reg.map;
-            ic.register = Some(reg.clone())
-        };
-
-        Self { ic }
-    }
-}
-
-// }}}
-// {{{ Channel
-
-pub struct Channel {
+struct InnerClient {
     raw_ic: sys::ichannel_t,
 
     connect_state: Option<Arc<Mutex<ConnectState>>>,
@@ -234,19 +200,38 @@ pub struct Channel {
     register: Option<Rc<RpcRegister>>,
 }
 
-impl Channel {
+pub struct Client {
+    inner: Box<InnerClient>,
+}
+
+impl InnerClient {
     pub fn from_raw<'b>(ic: *mut sys::ichannel_t) -> &'b mut Self {
         unsafe { &mut *((*ic).priv_data as *mut Self) }
     }
+}
 
-    pub fn to_raw(&mut self) -> *mut sys::ichannel_t {
-        &mut self.raw_ic as *mut _
-    }
+impl Client {
+    pub fn new(register: Option<&Rc<RpcRegister>>) -> Self {
+        let mut inner = Box::new(InnerClient {
+            raw_ic: unsafe { mem::zeroed() },
+            connect_state: None,
+            register: None,
+        });
 
-    fn spawn(&mut self, fd: i32) {
         unsafe {
-            sys::ic_spawn(&mut self.raw_ic, fd, None);
-        }
+            sys::ic_init(&mut inner.raw_ic);
+
+            inner.raw_ic.set_no_autodel(true);
+            inner.raw_ic.priv_data = &mut *inner as *mut InnerClient as *mut c_void;
+            inner.raw_ic.on_event = Some(Client::on_event);
+        };
+
+        if let Some(reg) = register {
+            inner.raw_ic.impl_ = &reg.map;
+            inner.register = Some(reg.clone())
+        };
+
+        Self { inner }
     }
 
     pub fn connect_once(&mut self, hostname: &str) -> ConnectFuture {
@@ -255,19 +240,18 @@ impl Channel {
             waker: None,
         }));
 
-        self.connect_state = Some(state.clone());
+        self.inner.connect_state = Some(state.clone());
 
         unsafe {
-            self.raw_ic.su = hostname_to_su(hostname);
-            self.raw_ic.on_event = Some(Channel::on_event);
-            sys::ic_connect(&mut self.raw_ic);
+            self.inner.raw_ic.su = hostname_to_su(hostname);
+            sys::ic_connect(&mut self.inner.raw_ic);
         }
 
         ConnectFuture { state }
     }
 
     unsafe extern "C" fn on_event(raw_ic: *mut sys::ichannel_t, evt: sys::ic_event_t) {
-        let ic = Channel::from_raw(raw_ic);
+        let ic = InnerClient::from_raw(raw_ic);
 
         match ic.connect_state.as_ref() {
             Some(state) => {
@@ -288,8 +272,41 @@ impl Channel {
 
     pub fn disconnect(&mut self) {
         unsafe {
-            sys::ic_disconnect(&mut self.raw_ic);
+            sys::ic_disconnect(&mut self.inner.raw_ic);
         }
+    }
+
+    fn spawn(&mut self, fd: i32) {
+        unsafe {
+            sys::ic_spawn(&mut self.inner.raw_ic, fd, None);
+        }
+    }
+
+    pub fn get_channel(&mut self) -> Channel {
+        Channel::from_raw(&mut self.inner.raw_ic as *mut _)
+    }
+}
+
+impl Drop for InnerClient {
+    fn drop(&mut self) {
+        unsafe {
+            sys::ic_wipe(&mut self.raw_ic);
+        }
+    }
+}
+
+// }}}
+// {{{ Channel
+
+pub struct Channel(*mut sys::ichannel_t);
+
+impl Channel {
+    pub fn from_raw<'b>(ic: *mut sys::ichannel_t) -> Self {
+        Self(ic)
+    }
+
+    pub fn to_raw(&mut self) -> *mut sys::ichannel_t {
+        self.0
     }
 
     pub fn query<M, T>(&mut self, input: T::Input) -> QueryFuture<T>
@@ -319,13 +336,6 @@ fn send_reply(res: &[u8], slot: u64, status: sys::ic_status_t) {
 
     unsafe {
         sys::ic_queue_for_reply(ic, msg);
-    }
-}
-impl Drop for Channel {
-    fn drop(&mut self) {
-        unsafe {
-            sys::ic_wipe(&mut self.raw_ic);
-        }
     }
 }
 

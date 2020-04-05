@@ -47,10 +47,11 @@ fn test_server_client() {
         let _server = Server::new("127.0.0.1", Some(reg));
 
         let mut client = Client::new(None);
-        let connected = client.ic.connect_once("127.0.0.1").await;
+        let connected = client.connect_once("127.0.0.1").await;
         assert!(connected);
 
-        let res = Module::call(&mut client.ic, HelloArg { value: 30 }).await.unwrap();
+        let mut channel = client.get_channel();
+        let res = Module::call(&mut channel, HelloArg { value: 30 }).await.unwrap();
         assert!(res.result == 53);
     });
 
