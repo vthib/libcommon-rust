@@ -1,0 +1,8 @@
+[package]
+name = "libcommon-module"
+version = "0.1.0"
+authors = ["Vincent Thiberville <vthiberville@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+libcommon-sys = { path = "../sys" }

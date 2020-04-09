@@ -2,7 +2,6 @@ use ic::ic_async::{Client, RpcRegister, Server};
 use ic::types::{ModRpc, Rpc};
 use libcommon_el as el;
 use libcommon_ic as ic;
-use libcommon_sys as sys;
 use ic::error;
 use serde_iop::{Deserialize, Serialize};
 use std::rc::Rc;
@@ -67,9 +66,7 @@ pub mod iop_module {
 fn test_server_client() {
     use iop_module::{SayHello, GetUser};
 
-    unsafe {
-        sys::module_require(sys::ic_get_module(), std::ptr::null_mut());
-    }
+    let _m = ic::use_module();
 
     let mut server_reg = RpcRegister::new();
     SayHello::implement(&mut server_reg, |mut ic, arg| async move {
@@ -116,8 +113,4 @@ fn test_server_client() {
         let res = SayHello::call(&mut channel, SayHelloArg { user_id: 1 }).await.unwrap();
         assert!(res.result == "Hi, Gyro Zeppeli.");
     });
-
-    unsafe {
-        sys::module_release(sys::ic_get_module());
-    }
 }

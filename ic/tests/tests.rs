@@ -5,7 +5,6 @@ use ic::types::{ModRpc, Rpc};
 use libcommon_el as el;
 use libcommon_el::el::Element;
 use libcommon_ic as ic;
-use libcommon_sys as sys;
 use serde_iop::{Deserialize, Serialize};
 use std::cell::RefCell;
 
@@ -57,47 +56,39 @@ impl Module {
 
 #[test]
 fn test_server_client() {
-    unsafe {
-        sys::module_require(sys::ic_get_module(), std::ptr::null_mut());
+    let _m = ic::use_module();
+
+    let mut reg = RpcRegister::new();
+
+    Module::implement(&mut reg, |arg| {
+        Ok(HelloRes { result: arg.value as u32 + 23 })
+    });
+
+    thread_local! {
+        static RESULT: RefCell<u32> = RefCell::new(0);
     }
 
-    {
-        let mut reg = RpcRegister::new();
+    let blocker = RefCell::new(el::el::Blocker::new());
 
-        Module::implement(&mut reg, |arg| {
-            Ok(HelloRes { result: arg.value as u32 + 23 })
-        });
+    let _server = Server::new("127.0.0.1", Some(reg));
 
-        thread_local! {
-            static RESULT: RefCell<u32> = RefCell::new(0);
+    let mut client = Client::new(None);
+    client.ic.connect("127.0.0.1", |ic, connected| {
+        if !connected {
+            return;
         }
 
-        let blocker = RefCell::new(el::el::Blocker::new());
+        blocker.borrow_mut().unregister();
 
-        let _server = Server::new("127.0.0.1", Some(reg));
-
-        let mut client = Client::new(None);
-        client.ic.connect("127.0.0.1", |ic, connected| {
-            if !connected {
-                return;
-            }
-
-            blocker.borrow_mut().unregister();
-
-            Module::call(ic, HelloArg { value: 30 }, |ic, res| {
-                RESULT.with(|result| {
-                    *result.borrow_mut() = res.unwrap().result;
-                });
-                ic.disconnect();
+        Module::call(ic, HelloArg { value: 30 }, |ic, res| {
+            RESULT.with(|result| {
+                *result.borrow_mut() = res.unwrap().result;
             });
+            ic.disconnect();
         });
+    });
 
-        el::el::el_loop();
+    el::el::el_loop();
 
-        RESULT.with(|result| assert!(*result.borrow() == 53));
-    }
-
-    unsafe {
-        sys::module_release(sys::ic_get_module());
-    }
+    RESULT.with(|result| assert!(*result.borrow() == 53));
 }
