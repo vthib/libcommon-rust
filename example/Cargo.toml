@@ -1,0 +1,15 @@
+[package]
+name = "libcommon-example"
+version = "0.1.0"
+authors = ["Vincent Thiberville <vthiberville@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+libcommon-el = { path = "../el" }
+libcommon-ic = { path = "../ic" }
+libcommon-module = { path = "../module" }
+# FIXME: should not have to import all this
+serde-iop = { path = "../serde-iop" }
+serde = { version = "1.0", features = [ "derive" ] }
+serde_repr = "0.1"
+lazy_static = "1.4"

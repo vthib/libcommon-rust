@@ -1,0 +1,65 @@
+package course;
+
+/* Expose an interface to 
+/* Type of available courses */
+enum StdCourseType {
+    C,
+    PYTHON,
+    RUST,
+};
+
+union CourseType {
+    /* Standard course */
+    StdCourseType std;
+    /* Custom course described by the client */
+    uint customId;
+};
+
+struct CourseProgress {
+    CourseType type;
+
+    uint completedSteps = 0;
+};
+
+struct User {
+    ulong id;
+
+    string name;
+
+    bool isAdmin = false;
+
+    string? email;
+
+    CourseProgress[] courses;
+};
+
+
+/* Server interface */
+interface User {
+    create
+        in (string name, string? email)
+        out (ulong id);
+
+    get
+        in (ulong id)
+        out (User user);
+
+    setProgress
+        in (ulong id, CourseProgress progress)
+        out void;
+
+    getCompletionRate
+        in (ulong id)
+        out (double percent);
+};
+
+interface Custom {
+    getNbTotalSteps
+        in (uint id)
+        out (uint nbTotalSteps);
+};
+
+module Course {
+    User user;
+    Custom custom;
+};

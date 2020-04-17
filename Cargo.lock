@@ -235,6 +235,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "libcommon-example"
+version = "0.1.0"
+dependencies = [
+ "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libcommon-el 0.1.0",
+ "libcommon-ic 0.1.0",
+ "libcommon-module 0.1.0",
+ "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde-iop 0.1.0",
+ "serde_repr 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "libcommon-ic"
 version = "0.1.0"
 dependencies = [

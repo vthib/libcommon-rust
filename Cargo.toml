@@ -2,6 +2,7 @@
 
 members = [
     "el",
+    "example",
     "ic",
     "module",
     "serde-iop",
