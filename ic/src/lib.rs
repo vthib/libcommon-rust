@@ -1,9 +1,9 @@
 pub mod error;
 pub mod ic;
-pub mod msg;
+pub mod ic_sync;
+pub mod msg_sync;
 pub mod types;
-
-pub mod ic_async;
+pub mod types_sync;
 
 use libcommon_module::Module;
 use libcommon_sys as sys;

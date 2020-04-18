@@ -1,5 +1,5 @@
 use crate::error;
-use crate::ic_async::{Channel, QueryFuture, RpcRegister};
+use crate::ic::{Channel, QueryFuture, RpcRegister};
 use serde_iop::to_bytes;
 use futures::future::Future;
 use serde_iop::{Deserialize, Serialize};

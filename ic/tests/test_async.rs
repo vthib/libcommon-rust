@@ -1,4 +1,4 @@
-use ic::ic_async::{Client, RpcRegister, Server};
+use ic::ic::{Client, RpcRegister, Server};
 use ic::types::Rpc;
 use libcommon_el as el;
 use libcommon_ic as ic;
