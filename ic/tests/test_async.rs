@@ -1,5 +1,5 @@
 use ic::ic_async::{Client, RpcRegister, Server};
-use ic::types::{ModRpc, Rpc};
+use ic::types::Rpc;
 use libcommon_el as el;
 use libcommon_ic as ic;
 use ic::error;
@@ -23,6 +23,9 @@ pub struct SayHello {}
 impl Rpc for SayHello {
     type Input = SayHelloArg;
     type Output = SayHelloRes;
+
+    const TAG: u16 = 1;
+    const ASYNC: bool = false;
 }
 
 // GetUser RPC on client
@@ -42,35 +45,26 @@ pub struct GetUser {}
 impl Rpc for GetUser {
     type Input = GetUserArg;
     type Output = GetUserRes;
+
+    const TAG: u16 = 2;
+    const ASYNC: bool = false;
 }
 
 pub mod iop_module {
-    pub struct SayHello {}
-    impl super::ModRpc for SayHello {
-        type RPC = super::SayHello;
-        const ASYNC: bool = false;
-        const CMD: i32 = 2;
-    }
-
-    pub struct GetUser {}
-    impl super::ModRpc for GetUser {
-        type RPC = super::GetUser;
-        const ASYNC: bool = false;
-        const CMD: i32 = 3;
-    }
+    pub const IFACE: u16 = 1;
 }
 
 // }}}
 
 #[test]
 fn test_server_client() {
-    use iop_module::{SayHello, GetUser};
+    use iop_module::IFACE;
 
     let _m = ic::use_module();
 
     let mut server_reg = RpcRegister::new();
-    SayHello::implement(&mut server_reg, |mut ic, arg| async move {
-        let user = GetUser::call(&mut ic, GetUserArg { user_id: arg.user_id }).await.unwrap();
+    SayHello::implement(&mut server_reg, IFACE, |mut ic, arg| async move {
+        let user = GetUser::call(&mut ic, IFACE, GetUserArg { user_id: arg.user_id }).await.unwrap();
 
         let result = match user.middlename {
             Some(mname) => format!("Hi, {} `{}` {}.", user.firstname, mname, user.lastname),
@@ -81,7 +75,7 @@ fn test_server_client() {
     });
 
     let mut client_reg = RpcRegister::new();
-    GetUser::implement(&mut client_reg, |_ic, arg| async move {
+    GetUser::implement(&mut client_reg, IFACE, |_ic, arg| async move {
         match arg.user_id {
             0 => Ok(GetUserRes {
                 firstname: "Joseph".to_owned(),
@@ -107,10 +101,10 @@ fn test_server_client() {
 
         let mut channel = client.get_channel();
 
-        let res = SayHello::call(&mut channel, SayHelloArg { user_id: 0 }).await.unwrap();
+        let res = SayHello::call(&mut channel, IFACE, SayHelloArg { user_id: 0 }).await.unwrap();
         assert!(res.result == "Hi, Joseph `JoJo` Joestar.");
 
-        let res = SayHello::call(&mut channel, SayHelloArg { user_id: 1 }).await.unwrap();
+        let res = SayHello::call(&mut channel, IFACE, SayHelloArg { user_id: 1 }).await.unwrap();
         assert!(res.result == "Hi, Gyro Zeppeli.");
     });
 }

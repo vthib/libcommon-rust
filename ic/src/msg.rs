@@ -1,6 +1,6 @@
 use crate::error;
 use crate::ic::Channel;
-use crate::types::{ModRpc, Rpc};
+use crate::types::Rpc;
 use libcommon_sys as sys;
 use serde_iop::{from_bytes, to_bytes};
 use std::marker::PhantomData;
@@ -24,9 +24,7 @@ where
     T: Rpc,
 {
     // Allocate enough memory to store the Rust cb */
-    pub fn new<M>() -> Self
-    where
-        M: ModRpc<RPC = T>,
+    pub fn new(iface_tag: u16) -> Self
     {
         let msg = unsafe {
             let msg = sys::ic_msg_new(std::mem::size_of::<BoxCb<T>>() as i32);
@@ -35,8 +33,8 @@ where
         };
 
         unsafe {
-            (*msg).set_async(M::ASYNC);
-            (*msg).cmd = M::CMD;
+            (*msg).set_async(T::ASYNC);
+            (*msg).cmd = T::get_cmd(iface_tag);
         }
         Self {
             msg,

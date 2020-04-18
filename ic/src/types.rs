@@ -1,29 +1,32 @@
 use crate::error;
 use crate::ic_async::{Channel, QueryFuture, RpcRegister};
+use serde_iop::to_bytes;
 use futures::future::Future;
 use serde_iop::{Deserialize, Serialize};
 
 pub trait Rpc {
     type Input: Serialize + for<'a> Deserialize<'a>;
     type Output: Serialize + for<'a> Deserialize<'a>;
-}
 
-pub trait ModRpc {
-    type RPC: Rpc;
-
+    const TAG: u16;
     const ASYNC: bool;
-    const CMD: i32;
 
-    fn implement<F, Fut>(reg: &mut RpcRegister, fun: F)
-    where
-        F: Fn(Channel, <Self::RPC as Rpc>::Input) -> Fut + 'static,
-        Fut: Future<Output = Result<<Self::RPC as Rpc>::Output, error::Error>> + 'static,
-        <Self::RPC as Rpc>::Output: 'static
-    {
-        reg.register(Self::CMD, fun);
+    fn get_cmd(iface_tag: u16) -> i32 {
+        ((iface_tag as i32) << 16) | (Self::TAG as i32)
     }
 
-    fn call(ic: &mut Channel, arg: <Self::RPC as Rpc>::Input) -> QueryFuture<Self::RPC> {
-        QueryFuture::new(ic, arg, Self::CMD, Self::ASYNC)
+    fn implement<F, Fut>(reg: &mut RpcRegister, iface_tag: u16, fun: F)
+    where
+        F: Fn(Channel, Self::Input) -> Fut + 'static,
+        Fut: Future<Output = Result<Self::Output, error::Error>> + 'static,
+        Self::Output: 'static
+    {
+        reg.register(Self::get_cmd(iface_tag), fun);
+    }
+
+    fn call(ic: &mut Channel, iface_tag: u16, arg: Self::Input) -> QueryFuture<Self::Output> {
+        let input = to_bytes(&arg).unwrap();
+
+        QueryFuture::new(ic, &input, Self::get_cmd(iface_tag), Self::ASYNC)
     }
 }

@@ -1,5 +1,4 @@
 use crate::error;
-use crate::types::{ModRpc, Rpc};
 use libc;
 use libcommon_sys as sys;
 use serde_iop::{from_bytes, to_bytes, Deserialize, Serialize};
@@ -325,14 +324,6 @@ impl Channel {
     pub fn to_raw(&mut self) -> *mut sys::ichannel_t {
         self.0
     }
-
-    pub fn query<M, T>(&mut self, input: T::Input) -> QueryFuture<T>
-    where
-        T: Rpc,
-        M: ModRpc<RPC = T>,
-    {
-        QueryFuture::new(self, input, M::CMD, M::ASYNC)
-    }
 }
 
 // TODO: by distinguishing async from std RPC impls, we could provide the ic if possible.
@@ -358,24 +349,20 @@ fn send_reply(res: &[u8], slot: u64, status: sys::ic_status_t) {
 
 // }}}
 // {{{ Query Future
-//
+
 struct QueryState<T> {
     result: Option<Result<T, error::Error>>,
     waker: Option<Waker>,
 }
 
 pub struct QueryFuture<T>
-where
-    T: Rpc,
 {
-    state: Arc<Mutex<QueryState<T::Output>>>,
+    state: Arc<Mutex<QueryState<T>>>,
 }
 
 impl<T> Future for QueryFuture<T>
-where
-    T: Rpc,
 {
-    type Output = Result<T::Output, error::Error>;
+    type Output = Result<T, error::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let mut state = self.state.lock().unwrap();
@@ -392,16 +379,16 @@ where
 type MsgPayload<T> = Mutex<QueryState<T>>;
 
 impl<T> QueryFuture<T>
-where
-    T: Rpc,
+    where T: for<'a> Deserialize<'a>
 {
-    pub fn new(ic: &mut Channel, input: T::Input, cmd: i32, async_: bool) -> Self {
+    pub fn new(ic: &mut Channel, input: &[u8], cmd: i32, async_: bool) -> Self
+    {
         let msg = unsafe { sys::ic_msg_new(std::mem::size_of::<*const c_void>() as i32) };
 
         // Serialize input
         let mut data = Vec::new();
         data.resize(12, 0);
-        data.extend_from_slice(&to_bytes(&input).unwrap());
+        data.extend_from_slice(input);
         let mut data = data.into_boxed_slice();
 
         unsafe {
@@ -453,7 +440,7 @@ where
         let res = match status {
             sys::ic_status_t_IC_MSG_OK => {
                 let bytes = unsafe { std::slice::from_raw_parts(res, rlen as usize) };
-                match from_bytes::<T::Output>(bytes) {
+                match from_bytes::<T>(bytes) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(error::Error::Generic(format!("unpacking error: {}", e))),
                 }
@@ -462,7 +449,7 @@ where
         };
 
         let state = unsafe {
-            let payload = (*msg).priv_.as_ptr() as *const *const MsgPayload<T::Output>;
+            let payload = (*msg).priv_.as_ptr() as *const *const MsgPayload<T>;
             Arc::from_raw(std::ptr::read(payload))
         };
 
