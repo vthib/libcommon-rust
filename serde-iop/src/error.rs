@@ -17,11 +17,11 @@ impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::Unimplemented(name) => write!(fmt, "serialization of {} not implemented", name),
-            Error::MissingTag => write!(fmt, "{}", self.description()),
-            Error::UnknownLen => write!(fmt, "{}", self.description()),
-            Error::InputTooShort => write!(fmt, "{}", self.description()),
-            Error::InvalidEncoding => write!(fmt, "{}", self.description()),
-            Error::TrailingCharacters => write!(fmt, "{}", self.description()),
+            Error::MissingTag => write!(fmt, "{}", self),
+            Error::UnknownLen => write!(fmt, "{}", self),
+            Error::InputTooShort => write!(fmt, "{}", self),
+            Error::InvalidEncoding => write!(fmt, "{}", self),
+            Error::TrailingCharacters => write!(fmt, "{}", self),
             Error::Custom(msg) => msg.fmt(fmt),
         }
     }
