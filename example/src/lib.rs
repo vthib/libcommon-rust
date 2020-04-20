@@ -1,3 +1,4 @@
+use futures;
 use lazy_static::lazy_static;
 use libcommon_ic::error;
 use libcommon_ic::ic::{Channel, RpcRegister};
@@ -130,6 +131,20 @@ async fn rpc_set_progress(
     state.set_user_progress(arg.id, arg.progress)
 }
 
+async fn course_type_get_nb_total_steps(
+    ic: &mut Channel,
+    typ: &CourseType,
+) -> Result<u32, error::Error> {
+    match typ {
+        CourseType::Std(t) => Ok(std_course_get_nb_total_steps(t)),
+        CourseType::CustomId(id) => {
+            let args = custom_rpc::GetNbTotalStepsArgs { id: *id };
+            let fut = custom_rpc::GetNbTotalSteps::call(ic, course_mod::CUSTOM, args);
+            fut.await.map(|v| v.nb_total_steps)
+        }
+    }
+}
+
 async fn rpc_get_completion_rate(
     mut ic: Channel,
     arg: rpc::GetCompletionRateArgs,
@@ -144,14 +159,32 @@ async fn rpc_get_completion_rate(
     // naive way of waiting for multiple futures
     for course in &user.courses {
         done_steps += course.completed_steps;
-        total_steps += match &course.r#type {
-            CourseType::Std(t) => std_course_get_nb_total_steps(t),
+        total_steps += course_type_get_nb_total_steps(&mut ic, &course.r#type).await?;
+    }
+    done_steps = 0;
+    total_steps = 0;
+
+    // better way to wait concurrently for all futures
+    let mut futs = Vec::new();
+    for course in &user.courses {
+        done_steps += course.completed_steps;
+        match &course.r#type {
+            CourseType::Std(t) => {
+                total_steps += std_course_get_nb_total_steps(t);
+            }
             CourseType::CustomId(id) => {
                 let args = custom_rpc::GetNbTotalStepsArgs { id: *id };
                 let fut = custom_rpc::GetNbTotalSteps::call(&mut ic, course_mod::CUSTOM, args);
-                fut.await?.nb_total_steps
+                futs.push(fut);
             }
-        };
+        }
+    }
+    if futs.len() > 0 {
+        total_steps += futures::future::try_join_all(futs)
+            .await?
+            .iter()
+            .map(|res| res.nb_total_steps)
+            .sum::<u32>();
     }
 
     let percent = if total_steps == 0 {

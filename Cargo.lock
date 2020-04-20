@@ -238,6 +238,7 @@ dependencies = [
 name = "libcommon-example"
 version = "0.1.0"
 dependencies = [
+ "futures 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libcommon-el 0.1.0",
  "libcommon-ic 0.1.0",
