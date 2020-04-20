@@ -1,16 +1,16 @@
-use std::collections::HashMap;
+use lazy_static::lazy_static;
+use libcommon_ic::error;
 use libcommon_ic::ic::{Channel, RpcRegister};
 use libcommon_ic::types::Rpc;
-use libcommon_ic::error;
-use lazy_static::lazy_static;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 mod iop;
+use iop::course::rpcs::{custom as custom_rpc, user as rpc};
 use iop::course::{CourseProgress, CourseType, StdCourseType, User};
-use iop::course::rpcs::{user as rpc, custom as custom_rpc};
 // needed to register and call rpcs with the right IOP module
-use iop::course::modules::{course as course_mod};
+use iop::course::modules::course as course_mod;
 
 // {{{ Helpers
 
@@ -29,7 +29,7 @@ impl Default for User {
             name: "".to_owned(),
             is_admin: false,
             email: None,
-            courses: vec![]
+            courses: vec![],
         }
     }
 }
@@ -37,17 +37,13 @@ impl Default for User {
 impl PartialEq for CourseType {
     fn eq(&self, other: &Self) -> bool {
         match self {
-            CourseType::Std(typ) => {
-                match other {
-                    CourseType::Std(otyp) => typ == otyp,
-                    _ => false
-                }
+            CourseType::Std(typ) => match other {
+                CourseType::Std(otyp) => typ == otyp,
+                _ => false,
             },
-            CourseType::CustomId(id) => {
-                match other {
-                    CourseType::CustomId(oid) => id == oid,
-                    _ => false
-                }
+            CourseType::CustomId(id) => match other {
+                CourseType::CustomId(oid) => id == oid,
+                _ => false,
             },
         }
     }
@@ -91,7 +87,11 @@ impl State {
         id
     }
 
-    fn set_user_progress(&mut self, user_id: u64, progress: CourseProgress) -> Result<(), error::Error> {
+    fn set_user_progress(
+        &mut self,
+        user_id: u64,
+        progress: CourseProgress,
+    ) -> Result<(), error::Error> {
         match self.users.get_mut(&user_id) {
             Some(user) => {
                 for course in user.courses.iter_mut() {
@@ -102,7 +102,7 @@ impl State {
                 }
                 user.courses.push(progress.clone());
                 Ok(())
-            },
+            }
             None => Err(error::Error::Generic(format!("unknown user {}", user_id))),
         }
     }
@@ -111,27 +111,29 @@ impl State {
 // }}}
 // {{{ User interface
 
-async fn rpc_get_user(_ic: Channel, arg: rpc::GetArgs)
-    -> Result<rpc::GetRes, error::Error>
-{
+async fn rpc_get_user(_ic: Channel, arg: rpc::GetArgs) -> Result<rpc::GetRes, error::Error> {
     let state = STATE.lock().unwrap();
     let state = state.borrow();
 
-    state.find_user(arg.id).map(|user| rpc::GetRes { user: user.clone() })
+    state
+        .find_user(arg.id)
+        .map(|user| rpc::GetRes { user: user.clone() })
 }
 
-async fn rpc_set_progress(_ic: Channel, arg: rpc::SetProgressArgs)
-    -> Result<rpc::SetProgressRes, error::Error>
-{
+async fn rpc_set_progress(
+    _ic: Channel,
+    arg: rpc::SetProgressArgs,
+) -> Result<rpc::SetProgressRes, error::Error> {
     let state = STATE.lock().unwrap();
     let mut state = state.borrow_mut();
 
     state.set_user_progress(arg.id, arg.progress)
 }
 
-async fn rpc_get_completion_rate(mut ic: Channel, arg: rpc::GetCompletionRateArgs)
-    -> Result<rpc::GetCompletionRateRes, error::Error>
-{
+async fn rpc_get_completion_rate(
+    mut ic: Channel,
+    arg: rpc::GetCompletionRateArgs,
+) -> Result<rpc::GetCompletionRateRes, error::Error> {
     let state = STATE.lock().unwrap();
     let state = state.borrow();
     let user = state.find_user(arg.id)?;
@@ -148,7 +150,7 @@ async fn rpc_get_completion_rate(mut ic: Channel, arg: rpc::GetCompletionRateArg
                 let args = custom_rpc::GetNbTotalStepsArgs { id: *id };
                 let fut = custom_rpc::GetNbTotalSteps::call(&mut ic, course_mod::CUSTOM, args);
                 fut.await?.nb_total_steps
-            },
+            }
         };
     }
 
@@ -171,7 +173,9 @@ pub fn register_user_rpcs(reg: &mut RpcRegister) {
         let state = STATE.lock().unwrap();
         let mut state = state.borrow_mut();
 
-        Ok(rpc::CreateRes { id: state.create_user(&arg.name, arg.email) })
+        Ok(rpc::CreateRes {
+            id: state.create_user(&arg.name, arg.email),
+        })
     });
 
     // a top level function can be registered as well
@@ -208,13 +212,19 @@ mod tests {
     use std::rc::Rc;
 
     async fn set_progress(ic: &mut Channel, id: u64, typ: CourseType, completed_steps: u32) {
-        rpc::SetProgress::call(ic, course_mod::USER, rpc::SetProgressArgs {
-            id,
-            progress: CourseProgress {
-                r#type: typ,
-                completed_steps,
-            }
-        }).await.unwrap();
+        rpc::SetProgress::call(
+            ic,
+            course_mod::USER,
+            rpc::SetProgressArgs {
+                id,
+                progress: CourseProgress {
+                    r#type: typ,
+                    completed_steps,
+                },
+            },
+        )
+        .await
+        .unwrap();
     }
 
     #[test]
@@ -242,15 +252,29 @@ mod tests {
             let mut ic = client.get_channel();
 
             // create two users
-            let jojo_id = rpc::Create::call(&mut ic, course_mod::USER, rpc::CreateArgs {
-                name: "Johnny Joestar".to_owned(),
-                email: None,
-            }).await.unwrap().id;
+            let jojo_id = rpc::Create::call(
+                &mut ic,
+                course_mod::USER,
+                rpc::CreateArgs {
+                    name: "Johnny Joestar".to_owned(),
+                    email: None,
+                },
+            )
+            .await
+            .unwrap()
+            .id;
 
-            let gyro_id = rpc::Create::call(&mut ic, course_mod::USER, rpc::CreateArgs {
-                name: "Gyro Zeppeli".to_owned(),
-                email: Some("gyro.z@napoli.it".to_owned()),
-            }).await.unwrap().id;
+            let gyro_id = rpc::Create::call(
+                &mut ic,
+                course_mod::USER,
+                rpc::CreateArgs {
+                    name: "Gyro Zeppeli".to_owned(),
+                    email: Some("gyro.z@napoli.it".to_owned()),
+                },
+            )
+            .await
+            .unwrap()
+            .id;
 
             // Set progress for Jojo in one std course and 2 customs
             set_progress(&mut ic, jojo_id, CourseType::CustomId(1), 3).await;
@@ -266,15 +290,21 @@ mod tests {
             let rate = rpc::GetCompletionRate::call(
                 &mut ic,
                 course_mod::USER,
-                rpc::GetCompletionRateArgs { id: jojo_id }
-            ).await.unwrap().percent;
+                rpc::GetCompletionRateArgs { id: jojo_id },
+            )
+            .await
+            .unwrap()
+            .percent;
             assert_eq!(rate, 54.05);
 
             let rate = rpc::GetCompletionRate::call(
                 &mut ic,
                 course_mod::USER,
-                rpc::GetCompletionRateArgs { id: gyro_id }
-            ).await.unwrap().percent;
+                rpc::GetCompletionRateArgs { id: gyro_id },
+            )
+            .await
+            .unwrap()
+            .percent;
             assert_eq!(rate, 30.77);
         });
     }
