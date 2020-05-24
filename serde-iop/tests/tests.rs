@@ -4,9 +4,11 @@ use serde_repr::{Serialize_repr, Deserialize_repr};
 
 #[test]
 fn test_basic() {
-    #[derive(Serialize, Deserialize, PartialEq, Debug)]
+    #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
     struct Inner {
         v1: Option<bool>,
+        _dummy2: (),
+        _dummy3: (),
         v2: Option<bool>,
         c: char,
     }
@@ -14,7 +16,18 @@ fn test_basic() {
     struct Test {
         int: u32,
         seq: Vec<String>,
+        _dummy3: (),
         inner: Inner,
+    }
+    impl Default for Test {
+        fn default() -> Self {
+            Test {
+                int: 3,
+                seq: Default::default(),
+                _dummy3: Default::default(),
+                inner: Default::default(),
+            }
+        }
     }
 
     let test = Test {
@@ -22,9 +35,10 @@ fn test_basic() {
         seq: vec!["a".to_owned(), "b".to_owned()],
         inner: Inner {
             v1: Some(true),
-            v2: None,
             c: '\n',
+            ..Default::default()
         },
+        ..Default::default()
     };
     let expected_bytes = [
         // int:
@@ -42,14 +56,14 @@ fn test_basic() {
         0x02, // len = 2
         b'b', b'\0', // "b"
         // inner:
-        0x43, // BLK4 | 3
+        0x44, // BLK4 | 4
         0x04, 0x00, 0x00, 0x00, // len: 4
         // v1:
         0x81, // INT1 | 1
         0x01, // value: 1
         // v2 is skipped
         // c:
-        0x83, // INT1 | 3
+        0x85, // INT1 | 5
         0x0A, // '\n'
     ];
     assert_eq!(to_bytes(&test).unwrap(), expected_bytes);

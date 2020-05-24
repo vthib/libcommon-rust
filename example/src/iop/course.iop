@@ -22,13 +22,13 @@ struct CourseProgress {
 };
 
 struct User {
-    ulong id;
+ 1: ulong id;
 
-    string name;
+ 3: string name;
 
-    bool isAdmin = false;
+ 9: bool isAdmin = false;
 
-    string? email;
+ 6: string? email;
 
     CourseProgress[] courses;
 };

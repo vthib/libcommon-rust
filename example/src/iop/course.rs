@@ -25,10 +25,14 @@ pub struct CourseProgress {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: u64,
+    _dummy2: (),
     pub name: String,
-    pub is_admin: bool,
+    _dummy4: (),
+    _dummy5: (),
     pub email: Option<String>,
     pub courses: Vec<CourseProgress>,
+    _dummy8: (),
+    pub is_admin: bool,
 }
 
 pub mod rpcs {
