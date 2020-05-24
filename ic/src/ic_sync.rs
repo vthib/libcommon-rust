@@ -13,7 +13,7 @@ use std::rc::Rc;
 pub struct RpcRegister {
     map: sys::qm_ic_cbs_t,
 
-    impls: HashMap<i32, Box<dyn Fn(&[u8]) -> Result<Vec<u8>, error::Error>>>,
+    impls: HashMap<i32, Box<dyn Fn(&[u8]) -> Result<Vec<u8>, error::Error<()>>>>,
 }
 
 impl RpcRegister {
@@ -37,10 +37,14 @@ impl RpcRegister {
         }
     }
 
-    pub fn register<I, O>(&mut self, cmd: i32, fun: impl Fn(I) -> Result<O, error::Error> + 'static)
-    where
+    pub fn register<I, O, E>(
+        &mut self,
+        cmd: i32,
+        fun: impl Fn(I) -> Result<O, error::Error<E>> + 'static,
+    ) where
         I: DeserializeOwned,
         O: Serialize,
+        E: Serialize,
     {
         self.impls.insert(
             cmd,

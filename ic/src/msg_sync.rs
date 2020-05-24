@@ -13,7 +13,7 @@ pub struct Msg<T> {
     _cb: PhantomData<BoxCb<T>>,
 }
 
-type BoxCb<T> = Box<dyn FnOnce(&mut Channel, Result<T, error::Error>)>;
+type BoxCb<T> = Box<dyn FnOnce(&mut Channel, Result<T, error::Error<()>>)>;
 
 impl<T> Msg<T>
 where
@@ -21,7 +21,7 @@ where
 {
     pub fn new<F>(input: &[u8], cmd: i32, async_: bool, cb: F) -> Self
     where
-        F: FnOnce(&mut Channel, Result<T, error::Error>) + 'static,
+        F: FnOnce(&mut Channel, Result<T, error::Error<()>>) + 'static,
     {
         let msg = unsafe { sys::ic_msg_new(std::mem::size_of::<BoxCb<T>>() as i32) };
 

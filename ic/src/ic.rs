@@ -41,11 +41,12 @@ impl RpcRegister {
         }
     }
 
-    pub fn register<'b, I, O, F>(&mut self, cmd: i32, fun: impl Fn(Channel, I) -> F + 'static)
+    pub fn register<'b, I, O, E, F>(&mut self, cmd: i32, fun: impl Fn(Channel, I) -> F + 'static)
     where
         I: DeserializeOwned,
         O: Serialize + 'static,
-        F: Future<Output = Result<O, error::Error>> + 'static,
+        E: Serialize + 'static,
+        F: Future<Output = Result<O, error::Error<E>>> + 'static,
     {
         self.impls.insert(
             cmd,
@@ -59,10 +60,17 @@ impl RpcRegister {
 
                             send_reply(&res, slot, sys::ic_status_t_IC_MSG_OK);
                         }
-                        Err(_e) => {
-                            let err = error::Error::Generic("rpc error".to_owned());
-                            // FIXME: reply error
-                            println!("error: {}", err);
+                        Err(e) => {
+                            match &e {
+                                error::Error::Exn(iop) => {
+                                    let exn = to_bytes(&iop).unwrap();
+
+                                    send_reply(&exn, slot, sys::ic_status_t::from(e));
+                                }
+                                _ => {
+                                    send_reply(&[], slot, sys::ic_status_t::from(e));
+                                }
+                            };
                         }
                     }
                 });
@@ -92,7 +100,8 @@ impl RpcRegister {
         let cb = match ic.register.as_mut().and_then(|reg| reg.impls.get(&cmd)) {
             Some(cb) => cb,
             None => {
-                let err = error::Error::Generic(format!("unimplemented RPC with cmd {}", cmd));
+                let err: error::Error<()> =
+                    error::Error::Generic(format!("unimplemented RPC with cmd {}", cmd));
                 // FIXME: reply error
                 println!("error: {}", err);
                 return;
@@ -347,17 +356,17 @@ fn send_reply(res: &[u8], slot: u64, status: sys::ic_status_t) {
 // }}}
 // {{{ Query Future
 
-struct QueryState<T> {
-    result: Option<Result<T, error::Error>>,
+struct QueryState<Res, Exn> {
+    result: Option<Result<Res, error::Error<Exn>>>,
     waker: Option<Waker>,
 }
 
-pub struct QueryFuture<T> {
-    state: Arc<Mutex<QueryState<T>>>,
+pub struct QueryFuture<Res, Exn> {
+    state: Arc<Mutex<QueryState<Res, Exn>>>,
 }
 
-impl<T> Future for QueryFuture<T> {
-    type Output = Result<T, error::Error>;
+impl<Res, Exn> Future for QueryFuture<Res, Exn> {
+    type Output = Result<Res, error::Error<Exn>>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let mut state = self.state.lock().unwrap();
@@ -371,11 +380,12 @@ impl<T> Future for QueryFuture<T> {
     }
 }
 
-type MsgPayload<T> = Mutex<QueryState<T>>;
+type MsgPayload<Res, Exn> = Mutex<QueryState<Res, Exn>>;
 
-impl<T> QueryFuture<T>
+impl<Res, Exn> QueryFuture<Res, Exn>
 where
-    T: DeserializeOwned,
+    Res: DeserializeOwned,
+    Exn: DeserializeOwned,
 {
     pub fn new(ic: &mut Channel, input: &[u8], cmd: i32, async_: bool) -> Self {
         let msg = unsafe { sys::ic_msg_new(std::mem::size_of::<*const c_void>() as i32) };
@@ -429,22 +439,35 @@ where
         status: sys::ic_status_t,
         res: *const c_uchar,
         rlen: u32,
-        _exn: *const c_uchar,
-        _elen: u32,
+        exn: *const c_uchar,
+        elen: u32,
     ) {
         let res = match status {
             sys::ic_status_t_IC_MSG_OK => {
                 let bytes = unsafe { std::slice::from_raw_parts(res, rlen as usize) };
-                match from_bytes::<T>(bytes) {
+                match from_bytes::<Res>(bytes) {
                     Ok(v) => Ok(v),
-                    Err(e) => Err(error::Error::Generic(format!("unpacking error: {}", e))),
+                    Err(e) => Err(error::Error::Generic(format!(
+                        "error when unpacking rpc response: {}",
+                        e
+                    ))),
+                }
+            }
+            sys::ic_status_t_IC_MSG_EXN => {
+                let iop_exn = unsafe { std::slice::from_raw_parts(exn, elen as usize) };
+                match from_bytes::<Exn>(iop_exn) {
+                    Ok(v) => Err(error::Error::Exn(v)),
+                    Err(e) => Err(error::Error::Generic(format!(
+                        "error when unpacking rpc exception: {}",
+                        e
+                    ))),
                 }
             }
             _ => Err(error::Error::from(status)),
         };
 
         let state = unsafe {
-            let payload = (*msg).priv_.as_ptr() as *const *const MsgPayload<T>;
+            let payload = (*msg).priv_.as_ptr() as *const *const MsgPayload<Res, Exn>;
             Arc::from_raw(std::ptr::read(payload))
         };
 

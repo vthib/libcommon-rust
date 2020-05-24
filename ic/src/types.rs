@@ -7,6 +7,7 @@ use serde_iop::{DeserializeOwned, Serialize};
 pub trait Rpc {
     type Input: Serialize + DeserializeOwned;
     type Output: Serialize + DeserializeOwned;
+    type Exception: Serialize + DeserializeOwned;
 
     const TAG: u16;
     const ASYNC: bool;
@@ -18,13 +19,18 @@ pub trait Rpc {
     fn implement<F, Fut>(reg: &mut RpcRegister, iface_tag: u16, fun: F)
     where
         F: Fn(Channel, Self::Input) -> Fut + 'static,
-        Fut: Future<Output = Result<Self::Output, error::Error>> + 'static,
+        Fut: Future<Output = Result<Self::Output, error::Error<Self::Exception>>> + 'static,
         Self::Output: 'static,
+        Self::Exception: 'static,
     {
         reg.register(Self::get_cmd(iface_tag), fun);
     }
 
-    fn call(ic: &mut Channel, iface_tag: u16, arg: Self::Input) -> QueryFuture<Self::Output> {
+    fn call(
+        ic: &mut Channel,
+        iface_tag: u16,
+        arg: Self::Input,
+    ) -> QueryFuture<Self::Output, Self::Exception> {
         let input = to_bytes(&arg).unwrap();
 
         QueryFuture::new(ic, &input, Self::get_cmd(iface_tag), Self::ASYNC)

@@ -17,14 +17,14 @@ pub trait Rpc {
 
     fn implement<F>(reg: &mut RpcRegister, iface_tag: u16, fun: F)
     where
-        F: Fn(Self::Input) -> Result<Self::Output, error::Error> + 'static,
+        F: Fn(Self::Input) -> Result<Self::Output, error::Error<()>> + 'static,
     {
         reg.register(Self::get_cmd(iface_tag), fun);
     }
 
     fn call<F>(ic: &mut Channel, iface_tag: u16, arg: Self::Input, cb: F)
     where
-        F: FnOnce(&mut Channel, Result<Self::Output, error::Error>) + 'static,
+        F: FnOnce(&mut Channel, Result<Self::Output, error::Error<()>>) + 'static,
     {
         let input = to_bytes(&arg).unwrap();
 

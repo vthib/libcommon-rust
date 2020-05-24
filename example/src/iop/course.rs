@@ -9,11 +9,21 @@ pub enum StdCourseType {
     PYTHON = 1,
     RUST = 2,
 }
+impl Default for StdCourseType {
+    fn default() -> Self {
+        StdCourseType::C
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum CourseType {
     Std(StdCourseType),
     CustomId(u32),
+}
+impl Default for CourseType {
+    fn default() -> Self {
+        CourseType::Std(Default::default())
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -21,18 +31,41 @@ pub struct CourseProgress {
     pub r#type: CourseType,
     pub completed_steps: u32,
 }
+impl Default for CourseProgress {
+    fn default() -> Self {
+        Self {
+            r#type: Default::default(),
+            completed_steps: 0,
+        }
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: u64,
-    _dummy2: (),
+    pub _dummy2: (),
     pub name: String,
-    _dummy4: (),
-    _dummy5: (),
+    pub _dummy4: (),
+    pub _dummy5: (),
     pub email: Option<String>,
     pub courses: Vec<CourseProgress>,
-    _dummy8: (),
+    pub _dummy8: (),
     pub is_admin: bool,
+}
+impl Default for User {
+    fn default() -> Self {
+        Self {
+            id: Default::default(),
+            _dummy2: (),
+            name: Default::default(),
+            _dummy4: (),
+            _dummy5: (),
+            email: Default::default(),
+            courses: Default::default(),
+            _dummy8: (),
+            is_admin: false,
+        }
+    }
 }
 
 pub mod rpcs {
@@ -45,15 +78,31 @@ pub mod rpcs {
             pub name: String,
             pub email: Option<String>,
         }
+        impl Default for CreateArgs {
+            fn default() -> Self {
+                Self {
+                    name: Default::default(),
+                    email: Default::default(),
+                }
+            }
+        }
         #[derive(Clone, Serialize, Deserialize)]
         pub struct CreateRes {
             pub id: u64,
+        }
+        impl Default for CreateRes {
+            fn default() -> Self {
+                Self {
+                    id: Default::default(),
+                }
+            }
         }
         pub type CreateExn = ();
         pub struct Create {}
         impl libcommon_ic::types::Rpc for Create {
             type Input = CreateArgs;
             type Output = CreateRes;
+            type Exception = CreateExn;
             const TAG: u16 = 1;
             const ASYNC: bool = false;
         }
@@ -62,15 +111,30 @@ pub mod rpcs {
         pub struct GetArgs {
             pub id: u64,
         }
+        impl Default for GetArgs {
+            fn default() -> Self {
+                Self {
+                    id: Default::default(),
+                }
+            }
+        }
         #[derive(Clone, Serialize, Deserialize)]
         pub struct GetRes {
             pub user: User,
+        }
+        impl Default for GetRes {
+            fn default() -> Self {
+                Self {
+                    user: Default::default(),
+                }
+            }
         }
         pub type GetExn = ();
         pub struct Get {}
         impl libcommon_ic::types::Rpc for Get {
             type Input = GetArgs;
             type Output = GetRes;
+            type Exception = GetExn;
             const TAG: u16 = 2;
             const ASYNC: bool = false;
         }
@@ -80,12 +144,21 @@ pub mod rpcs {
             pub id: u64,
             pub progress: CourseProgress,
         }
+        impl Default for SetProgressArgs {
+            fn default() -> Self {
+                Self {
+                    id: Default::default(),
+                    progress: Default::default(),
+                }
+            }
+        }
         pub type SetProgressRes = ();
         pub type SetProgressExn = ();
         pub struct SetProgress {}
         impl libcommon_ic::types::Rpc for SetProgress {
             type Input = SetProgressArgs;
             type Output = SetProgressRes;
+            type Exception = SetProgressExn;
             const TAG: u16 = 3;
             const ASYNC: bool = false;
         }
@@ -94,15 +167,30 @@ pub mod rpcs {
         pub struct GetCompletionRateArgs {
             pub id: u64,
         }
+        impl Default for GetCompletionRateArgs {
+            fn default() -> Self {
+                Self {
+                    id: Default::default(),
+                }
+            }
+        }
         #[derive(Clone, Serialize, Deserialize)]
         pub struct GetCompletionRateRes {
             pub percent: f64,
+        }
+        impl Default for GetCompletionRateRes {
+            fn default() -> Self {
+                Self {
+                    percent: Default::default(),
+                }
+            }
         }
         pub type GetCompletionRateExn = ();
         pub struct GetCompletionRate {}
         impl libcommon_ic::types::Rpc for GetCompletionRate {
             type Input = GetCompletionRateArgs;
             type Output = GetCompletionRateRes;
+            type Exception = GetCompletionRateExn;
             const TAG: u16 = 4;
             const ASYNC: bool = false;
         }
@@ -116,15 +204,30 @@ pub mod rpcs {
         pub struct GetNbTotalStepsArgs {
             pub id: u32,
         }
+        impl Default for GetNbTotalStepsArgs {
+            fn default() -> Self {
+                Self {
+                    id: Default::default(),
+                }
+            }
+        }
         #[derive(Clone, Serialize, Deserialize)]
         pub struct GetNbTotalStepsRes {
             pub nb_total_steps: u32,
+        }
+        impl Default for GetNbTotalStepsRes {
+            fn default() -> Self {
+                Self {
+                    nb_total_steps: Default::default(),
+                }
+            }
         }
         pub type GetNbTotalStepsExn = ();
         pub struct GetNbTotalSteps {}
         impl libcommon_ic::types::Rpc for GetNbTotalSteps {
             type Input = GetNbTotalStepsArgs;
             type Output = GetNbTotalStepsRes;
+            type Exception = GetNbTotalStepsExn;
             const TAG: u16 = 1;
             const ASYNC: bool = false;
         }

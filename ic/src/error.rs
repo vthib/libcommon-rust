@@ -3,7 +3,8 @@ use std::error;
 use std::fmt;
 
 #[derive(Debug)]
-pub enum Error {
+pub enum Error<T> {
+    Exn(T),
     Generic(String),
     Retry,
     Abort,
@@ -15,12 +16,13 @@ pub enum Error {
     Canceled,
 }
 
-impl fmt::Display for Error {
+impl<T> fmt::Display for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
             "query error: {}",
             match self {
+                Error::Exn(_s) => "exception",
                 Error::Generic(s) => s,
                 Error::Retry => "retry",
                 Error::Abort => "abort",
@@ -35,13 +37,11 @@ impl fmt::Display for Error {
     }
 }
 
-impl error::Error for Error {}
+impl<T> error::Error for Error<T> where T: std::fmt::Debug {}
 
-impl From<sys::ic_status_t> for Error {
+impl<T> From<sys::ic_status_t> for Error<T> {
     fn from(status: sys::ic_status_t) -> Self {
         match status {
-            /* TODO: handle exception */
-            sys::ic_status_t_IC_MSG_EXN => Self::Generic("exception".to_owned()),
             sys::ic_status_t_IC_MSG_RETRY => Self::Retry,
             sys::ic_status_t_IC_MSG_ABORT => Self::Abort,
             sys::ic_status_t_IC_MSG_INVALID => Self::Invalid,
@@ -52,6 +52,27 @@ impl From<sys::ic_status_t> for Error {
             sys::ic_status_t_IC_MSG_CANCELED => Self::Canceled,
             _ => {
                 unreachable!();
+            }
+        }
+    }
+}
+
+impl<T> From<Error<T>> for sys::ic_status_t {
+    fn from(status: Error<T>) -> Self {
+        match status {
+            Error::Retry => sys::ic_status_t_IC_MSG_RETRY,
+            Error::Abort => sys::ic_status_t_IC_MSG_ABORT,
+            Error::Invalid => sys::ic_status_t_IC_MSG_INVALID,
+            Error::Unimplemented => sys::ic_status_t_IC_MSG_UNIMPLEMENTED,
+            Error::ServerError => sys::ic_status_t_IC_MSG_SERVER_ERROR,
+            Error::ProxyError => sys::ic_status_t_IC_MSG_PROXY_ERROR,
+            Error::TimedOut => sys::ic_status_t_IC_MSG_TIMEDOUT,
+            Error::Canceled => sys::ic_status_t_IC_MSG_CANCELED,
+            Error::Exn(_) => sys::ic_status_t_IC_MSG_EXN,
+            /* TODO: this isn't what we want to do */
+            Error::Generic(s) => {
+                println!("generic error: {}", s);
+                sys::ic_status_t_IC_MSG_SERVER_ERROR
             }
         }
     }

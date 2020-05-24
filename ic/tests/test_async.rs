@@ -14,7 +14,7 @@ use std::rc::Rc;
 pub struct SayHelloArg {
     user_id: u32,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SayHelloRes {
     result: String,
 }
@@ -23,6 +23,7 @@ pub struct SayHello {}
 impl Rpc for SayHello {
     type Input = SayHelloArg;
     type Output = SayHelloRes;
+    type Exception = GetUserExn;
 
     const TAG: u16 = 1;
     const ASYNC: bool = false;
@@ -40,11 +41,16 @@ pub struct GetUserRes {
     lastname: String,
     middlename: Option<String>,
 }
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetUserExn {
+    error: String,
+}
 pub struct GetUser {}
 
 impl Rpc for GetUser {
     type Input = GetUserArg;
     type Output = GetUserRes;
+    type Exception = GetUserExn;
 
     const TAG: u16 = 2;
     const ASYNC: bool = false;
@@ -71,8 +77,7 @@ fn test_server_client() {
                 user_id: arg.user_id,
             },
         )
-        .await
-        .unwrap();
+        .await?;
 
         let result = match user.middlename {
             Some(mname) => format!("Hi, {} `{}` {}.", user.firstname, mname, user.lastname),
@@ -95,10 +100,9 @@ fn test_server_client() {
                 middlename: None,
                 lastname: "Zeppeli".to_owned(),
             }),
-            _ => Err(error::Error::Generic(format!(
-                "unknown user with id {}",
-                arg.user_id
-            ))),
+            _ => Err(error::Error::Exn(GetUserExn {
+                error: format!("unknown user with id {}", arg.user_id),
+            })),
         }
     });
 
@@ -121,5 +125,13 @@ fn test_server_client() {
             .await
             .unwrap();
         assert!(res.result == "Hi, Gyro Zeppeli.");
+
+        let res = SayHello::call(&mut channel, IFACE, SayHelloArg { user_id: 2 })
+            .await
+            .unwrap_err();
+        match res {
+            error::Error::Exn(v) => assert!(v.error == "unknown user with id 2"),
+            _ => assert!(false),
+        };
     });
 }

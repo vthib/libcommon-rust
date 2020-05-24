@@ -23,18 +23,6 @@ fn std_course_get_nb_total_steps(typ: &StdCourseType) -> u32 {
     }
 }
 
-impl Default for User {
-    fn default() -> User {
-        User {
-            id: 0,
-            name: "".to_owned(),
-            is_admin: false,
-            email: None,
-            courses: vec![],
-        }
-    }
-}
-
 impl PartialEq for CourseType {
     fn eq(&self, other: &Self) -> bool {
         match self {
@@ -66,11 +54,13 @@ lazy_static! {
 }
 
 impl State {
-    fn find_user(&self, user_id: u64) -> Result<&User, error::Error> {
-        match self.users.get(&user_id) {
-            Some(u) => Ok(u),
-            None => Err(error::Error::Generic(format!("unknown user {}", user_id))),
-        }
+    fn find_user(&self, user_id: u64) -> Result<&User, error::Error<()>> {
+        self.users
+            .get(&user_id)
+            .ok_or(error::Error::Generic(format!(
+                "unknown user with id {}",
+                user_id
+            )))
     }
 
     fn create_user(&mut self, name: &str, email: Option<String>) -> u64 {
@@ -88,11 +78,7 @@ impl State {
         id
     }
 
-    fn set_user_progress(
-        &mut self,
-        user_id: u64,
-        progress: CourseProgress,
-    ) -> Result<(), error::Error> {
+    fn set_user_progress(&mut self, user_id: u64, progress: CourseProgress) -> Result<(), String> {
         match self.users.get_mut(&user_id) {
             Some(user) => {
                 for course in user.courses.iter_mut() {
@@ -104,7 +90,7 @@ impl State {
                 user.courses.push(progress.clone());
                 Ok(())
             }
-            None => Err(error::Error::Generic(format!("unknown user {}", user_id))),
+            None => Err(format!("unknown user {}", user_id)),
         }
     }
 }
@@ -112,7 +98,10 @@ impl State {
 // }}}
 // {{{ User interface
 
-async fn rpc_get_user(_ic: Channel, arg: rpc::GetArgs) -> Result<rpc::GetRes, error::Error> {
+async fn rpc_get_user(
+    _ic: Channel,
+    arg: rpc::GetArgs,
+) -> Result<rpc::GetRes, error::Error<rpc::GetExn>> {
     let state = STATE.lock().unwrap();
     let state = state.borrow();
 
@@ -124,17 +113,19 @@ async fn rpc_get_user(_ic: Channel, arg: rpc::GetArgs) -> Result<rpc::GetRes, er
 async fn rpc_set_progress(
     _ic: Channel,
     arg: rpc::SetProgressArgs,
-) -> Result<rpc::SetProgressRes, error::Error> {
+) -> Result<rpc::SetProgressRes, error::Error<rpc::SetProgressExn>> {
     let state = STATE.lock().unwrap();
     let mut state = state.borrow_mut();
 
-    state.set_user_progress(arg.id, arg.progress)
+    state
+        .set_user_progress(arg.id, arg.progress)
+        .map_err(|v| error::Error::Generic(v))
 }
 
 async fn course_type_get_nb_total_steps(
     ic: &mut Channel,
     typ: &CourseType,
-) -> Result<u32, error::Error> {
+) -> Result<u32, error::Error<rpc::GetCompletionRateExn>> {
     match typ {
         CourseType::Std(t) => Ok(std_course_get_nb_total_steps(t)),
         CourseType::CustomId(id) => {
@@ -148,7 +139,7 @@ async fn course_type_get_nb_total_steps(
 async fn rpc_get_completion_rate(
     mut ic: Channel,
     arg: rpc::GetCompletionRateArgs,
-) -> Result<rpc::GetCompletionRateRes, error::Error> {
+) -> Result<rpc::GetCompletionRateRes, error::Error<rpc::GetCompletionRateExn>> {
     let state = STATE.lock().unwrap();
     let state = state.borrow();
     let user = state.find_user(arg.id)?;
