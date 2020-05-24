@@ -170,8 +170,7 @@ impl<'a> Server<'a> {
         0
     }
 
-    unsafe extern "C" fn on_event(_ic: *mut sys::ichannel_t, _evt: sys::ic_event_t) {
-    }
+    unsafe extern "C" fn on_event(_ic: *mut sys::ichannel_t, _evt: sys::ic_event_t) {}
 }
 
 impl<'a> Drop for InnerServer<'a> {

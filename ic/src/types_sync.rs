@@ -22,12 +22,9 @@ pub trait Rpc {
         reg.register(Self::get_cmd(iface_tag), fun);
     }
 
-    fn call<F>(
-        ic: &mut Channel,
-        iface_tag: u16,
-        arg: Self::Input,
-        cb: F)
-        where F: FnOnce(&mut Channel, Result<Self::Output, error::Error>) + 'static
+    fn call<F>(ic: &mut Channel, iface_tag: u16, arg: Self::Input, cb: F)
+    where
+        F: FnOnce(&mut Channel, Result<Self::Output, error::Error>) + 'static,
     {
         let input = to_bytes(&arg).unwrap();
 

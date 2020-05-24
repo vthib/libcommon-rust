@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_iop::{from_bytes, to_bytes};
-use serde_repr::{Serialize_repr, Deserialize_repr};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 #[test]
 fn test_basic() {
@@ -107,7 +107,7 @@ fn test_all_types() {
         //cls2: Class2,
         m: f64,
         n: bool,
-        u: ()
+        u: (),
     }
 
     let test = StructA {

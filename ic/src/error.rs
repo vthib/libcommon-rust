@@ -1,6 +1,6 @@
+use libcommon_sys as sys;
 use std::error;
 use std::fmt;
-use libcommon_sys as sys;
 
 #[derive(Debug)]
 pub enum Error {
@@ -12,27 +12,30 @@ pub enum Error {
     ServerError,
     ProxyError,
     TimedOut,
-    Canceled
+    Canceled,
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "query error: {}", match self {
-            Error::Generic(s) => s,
-            Error::Retry => "retry",
-            Error::Abort => "abort",
-            Error::Invalid => "invalid",
-            Error::Unimplemented => "unimplemented",
-            Error::ServerError => "server error",
-            Error::ProxyError => "proxy error",
-            Error::TimedOut => "timed out",
-            Error::Canceled => "canceled"
-        })
+        write!(
+            f,
+            "query error: {}",
+            match self {
+                Error::Generic(s) => s,
+                Error::Retry => "retry",
+                Error::Abort => "abort",
+                Error::Invalid => "invalid",
+                Error::Unimplemented => "unimplemented",
+                Error::ServerError => "server error",
+                Error::ProxyError => "proxy error",
+                Error::TimedOut => "timed out",
+                Error::Canceled => "canceled",
+            }
+        )
     }
 }
 
-impl error::Error for Error {
-}
+impl error::Error for Error {}
 
 impl From<sys::ic_status_t> for Error {
     fn from(status: sys::ic_status_t) -> Self {
@@ -49,7 +52,7 @@ impl From<sys::ic_status_t> for Error {
             sys::ic_status_t_IC_MSG_CANCELED => Self::Canceled,
             _ => {
                 unreachable!();
-            },
+            }
         }
     }
 }

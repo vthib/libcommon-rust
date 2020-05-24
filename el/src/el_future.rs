@@ -1,12 +1,12 @@
-use libcommon_sys as sys;
-use futures::future::Future;
-use std::task::{Context, Poll, Waker};
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
 use crate::el;
 use futures::executor::LocalPool;
+use futures::future::Future;
 use futures::task::LocalSpawnExt;
+use libcommon_sys as sys;
 use std::cell::RefCell;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
 
 // {{{ Timer
 
@@ -22,10 +22,9 @@ pub struct Timer {
 impl Future for Timer {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output>
-    {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let mut state = self.state.lock().unwrap();
-        if state.fired  {
+        if state.fired {
             Poll::Ready(())
         } else {
             state.waker = Some(cx.waker().clone());
@@ -35,8 +34,7 @@ impl Future for Timer {
 }
 
 impl Timer {
-    pub async fn new(next: i64, flags: sys::ev_timer_flags_t) -> Self
-    {
+    pub async fn new(next: i64, flags: sys::ev_timer_flags_t) -> Self {
         let state = TimerState {
             fired: false,
             waker: None,
@@ -53,9 +51,7 @@ impl Timer {
                 }
             });
         }
-        Timer {
-            state
-        }
+        Timer { state }
     }
 }
 
@@ -70,12 +66,13 @@ struct ElPool {
 
 // XXX: There isn't really a way around this thread local as long as rust code depends on async C
 // code (for example ichannel comms).
-thread_local!{
+thread_local! {
     static POOL: RefCell<ElPool> = RefCell::new(ElPool { pool: LocalPool::new(), nb_tasks: 0 });
 }
 
 pub fn spawn<F>(fun: F)
-    where F: Future<Output = ()> + 'static
+where
+    F: Future<Output = ()> + 'static,
 {
     POOL.with(|pool| {
         let mut pool = pool.borrow_mut();
@@ -88,7 +85,8 @@ pub fn spawn<F>(fun: F)
 }
 
 pub fn exec_test_async<F>(fun: F)
-    where F: Future<Output = ()> + 'static
+where
+    F: Future<Output = ()> + 'static,
 {
     spawn(fun);
 
@@ -112,7 +110,7 @@ pub fn exec_test_async<F>(fun: F)
 mod tests {
     use std::cell::RefCell;
 
-    thread_local!{
+    thread_local! {
         static GUARD: RefCell<bool> = RefCell::new(false);
     }
 

@@ -1,6 +1,7 @@
-use serde::de::{self, DeserializeSeed, SeqAccess, Visitor, EnumAccess, VariantAccess,
-                IntoDeserializer};
-use serde::{Deserialize, forward_to_deserialize_any};
+use serde::de::{
+    self, DeserializeSeed, EnumAccess, IntoDeserializer, SeqAccess, VariantAccess, Visitor,
+};
+use serde::{forward_to_deserialize_any, Deserialize};
 
 mod read;
 use read::BinReader;
@@ -58,7 +59,7 @@ macro_rules! deserialize_int_method {
             let wire = self.get_wire()?;
             self.reader.visit_integer(wire, visitor)
         }
-    }
+    };
 }
 
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
@@ -365,7 +366,7 @@ impl<'de, 'a> SeqAccess<'de> for StructDeserializer<'a, 'de> {
 
 struct UnionDeserializer<'a, 'de: 'a> {
     de: &'a mut Deserializer<'de>,
-    _union_len: Option<usize>
+    _union_len: Option<usize>,
 }
 
 impl<'a, 'de> UnionDeserializer<'a, 'de> {
@@ -374,7 +375,7 @@ impl<'a, 'de> UnionDeserializer<'a, 'de> {
 
         UnionDeserializer {
             de,
-            _union_len: union_len.map(|v| v + current_read_len)
+            _union_len: union_len.map(|v| v + current_read_len),
         }
     }
 }
@@ -436,11 +437,7 @@ impl<'de, 'a> VariantAccess<'de> for &'a mut UnionDeserializer<'a, 'de> {
         Err(Error::Unimplemented("tuple variant"))
     }
 
-    fn struct_variant<V>(
-        self,
-        _fields: &'static [&'static str],
-        _visitor: V,
-    ) -> Result<V::Value>
+    fn struct_variant<V>(self, _fields: &'static [&'static str], _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {

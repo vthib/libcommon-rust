@@ -1,7 +1,7 @@
 use crate::error;
 use crate::ic_sync::Channel;
 use libcommon_sys as sys;
-use serde_iop::{from_bytes, Serialize, DeserializeOwned};
+use serde_iop::{from_bytes, DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 use std::os::raw::{c_uchar, c_void};
 
@@ -17,11 +17,11 @@ type BoxCb<T> = Box<dyn FnOnce(&mut Channel, Result<T, error::Error>)>;
 
 impl<T> Msg<T>
 where
-    T: Serialize + DeserializeOwned
+    T: Serialize + DeserializeOwned,
 {
     pub fn new<F>(input: &[u8], cmd: i32, async_: bool, cb: F) -> Self
     where
-        F: FnOnce(&mut Channel, Result<T, error::Error>) + 'static
+        F: FnOnce(&mut Channel, Result<T, error::Error>) + 'static,
     {
         let msg = unsafe { sys::ic_msg_new(std::mem::size_of::<BoxCb<T>>() as i32) };
 

@@ -1,7 +1,7 @@
 use crate::error;
 use crate::ic::{Channel, QueryFuture, RpcRegister};
-use serde_iop::to_bytes;
 use futures::future::Future;
+use serde_iop::to_bytes;
 use serde_iop::{DeserializeOwned, Serialize};
 
 pub trait Rpc {
@@ -19,7 +19,7 @@ pub trait Rpc {
     where
         F: Fn(Channel, Self::Input) -> Fut + 'static,
         Fut: Future<Output = Result<Self::Output, error::Error>> + 'static,
-        Self::Output: 'static
+        Self::Output: 'static,
     {
         reg.register(Self::get_cmd(iface_tag), fun);
     }

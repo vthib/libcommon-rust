@@ -1,8 +1,8 @@
+use ic::error;
 use ic::ic::{Client, RpcRegister, Server};
 use ic::types::Rpc;
 use libcommon_el as el;
 use libcommon_ic as ic;
-use ic::error;
 use serde_iop::{Deserialize, Serialize};
 use std::rc::Rc;
 
@@ -64,7 +64,15 @@ fn test_server_client() {
 
     let mut server_reg = RpcRegister::new();
     SayHello::implement(&mut server_reg, IFACE, |mut ic, arg| async move {
-        let user = GetUser::call(&mut ic, IFACE, GetUserArg { user_id: arg.user_id }).await.unwrap();
+        let user = GetUser::call(
+            &mut ic,
+            IFACE,
+            GetUserArg {
+                user_id: arg.user_id,
+            },
+        )
+        .await
+        .unwrap();
 
         let result = match user.middlename {
             Some(mname) => format!("Hi, {} `{}` {}.", user.firstname, mname, user.lastname),
@@ -87,7 +95,10 @@ fn test_server_client() {
                 middlename: None,
                 lastname: "Zeppeli".to_owned(),
             }),
-            _ => Err(error::Error::Generic(format!("unknown user with id {}", arg.user_id)))
+            _ => Err(error::Error::Generic(format!(
+                "unknown user with id {}",
+                arg.user_id
+            ))),
         }
     });
 
@@ -101,10 +112,14 @@ fn test_server_client() {
 
         let mut channel = client.get_channel();
 
-        let res = SayHello::call(&mut channel, IFACE, SayHelloArg { user_id: 0 }).await.unwrap();
+        let res = SayHello::call(&mut channel, IFACE, SayHelloArg { user_id: 0 })
+            .await
+            .unwrap();
         assert!(res.result == "Hi, Joseph `JoJo` Joestar.");
 
-        let res = SayHello::call(&mut channel, IFACE, SayHelloArg { user_id: 1 }).await.unwrap();
+        let res = SayHello::call(&mut channel, IFACE, SayHelloArg { user_id: 1 })
+            .await
+            .unwrap();
         assert!(res.result == "Hi, Gyro Zeppeli.");
     });
 }

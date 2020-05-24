@@ -1,8 +1,8 @@
 use bindgen;
+use std::env;
 use std::fs::OpenOptions;
 use std::io::BufWriter;
 use std::io::Write;
-use std::env;
 use std::path::Path;
 
 fn main() {
@@ -25,11 +25,9 @@ fn main() {
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .clang_arg(format!("-I{}", root_dir.to_str().unwrap()))
         .clang_arg(format!("-I{}", src_dir.join("compat").to_str().unwrap()))
-
         .whitelist_function("ps_init")
         .whitelist_function("module_require")
         .whitelist_function("module_release")
-
         // For crate 'el'
         .whitelist_function("el_timer_register_d")
         .whitelist_function("el_unref")
@@ -38,34 +36,28 @@ fn main() {
         .whitelist_function("el_loop")
         .whitelist_function("el_loop_timeout")
         .whitelist_function("el_has_pending_events")
-
         // For crate 'ic'
         .whitelist_function("ic_get_module")
-
         // msg
         .whitelist_function("ic_msg_new")
         .whitelist_function("ic_msg_new_for_reply")
         .whitelist_function("ic_queue_for_reply")
         .whitelist_function("ic_msg_delete")
         .whitelist_function("__ic_query")
-
         // rpc-register
         .whitelist_function("qhash_init")
         .whitelist_function("_ic_register")
-
         // server
         .whitelist_function("addr_parse_minport")
         .whitelist_function("addr_info")
         .whitelist_function("ic_listento")
         .whitelist_function("ic_spawn")
-
         // client
         .whitelist_function("ic_init")
         .whitelist_function("ic_connect")
         .whitelist_function("ic_connect_blocking")
         .whitelist_function("ic_disconnect")
         .whitelist_function("ic_wipe")
-
         // Doctests are otherwise generated, which fails due to
         // possibly invalid doxygen comments.
         .generate_comments(false)
@@ -81,8 +73,9 @@ fn main() {
         .unwrap();
     let mut writer = BufWriter::new(file);
 
-    writer.write(
-        b"
+    writer
+        .write(
+            b"
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -90,8 +83,9 @@ fn main() {
 #[link(name=\"libcommon-iop\", kind=\"static\")]
 #[link(name=\"libcommon-minimal\", kind=\"static\")]
 extern \"C\" {}
-    ")
-    .unwrap();
+    ",
+        )
+        .unwrap();
     writer.flush().unwrap();
 
     bindings

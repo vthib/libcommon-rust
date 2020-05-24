@@ -41,7 +41,9 @@ fn test_server_client() {
     let mut reg = RpcRegister::new();
 
     Hello::implement(&mut reg, IFACE, |arg| {
-        Ok(HelloRes { result: arg.value as u32 + 23 })
+        Ok(HelloRes {
+            result: arg.value as u32 + 23,
+        })
     });
 
     thread_local! {

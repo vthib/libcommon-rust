@@ -1,16 +1,16 @@
 use crate::error;
-use libc;
-use libcommon_sys as sys;
-use serde_iop::{from_bytes, to_bytes, Serialize, DeserializeOwned};
-use std::collections::HashMap;
 use futures::future::{Future, FutureExt};
+use libc;
+use libcommon_el::el_future;
+use libcommon_sys as sys;
+use serde_iop::{from_bytes, to_bytes, DeserializeOwned, Serialize};
+use std::collections::HashMap;
 use std::mem;
 use std::os::raw::{c_uchar, c_void};
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
-use libcommon_el::el_future;
 
 // {{{ RPC Implementation register
 
@@ -41,11 +41,8 @@ impl RpcRegister {
         }
     }
 
-    pub fn register<'b, I, O, F>(
-        &mut self,
-        cmd: i32,
-        fun: impl Fn(Channel, I) -> F + 'static,
-    ) where
+    pub fn register<'b, I, O, F>(&mut self, cmd: i32, fun: impl Fn(Channel, I) -> F + 'static)
+    where
         I: DeserializeOwned,
         O: Serialize + 'static,
         F: Future<Output = Result<O, error::Error>> + 'static,
@@ -109,21 +106,21 @@ impl RpcRegister {
 
         let ic = Channel::from_raw(raw_ic);
         (cb)(ic, &data, slot);
-       // match ic.register.as_ref().and_then(|reg| reg.impls.get(&cmd)) {
-       //     Some(cb) => {
-       //         let data = std::slice::from_raw_parts(
-       //             data.__bindgen_anon_1.s as *const c_void as *const u8,
-       //             data.len as usize,
-       //         );
+        // match ic.register.as_ref().and_then(|reg| reg.impls.get(&cmd)) {
+        //     Some(cb) => {
+        //         let data = std::slice::from_raw_parts(
+        //             data.__bindgen_anon_1.s as *const c_void as *const u8,
+        //             data.len as usize,
+        //         );
 
-       //         (cb)(ic, &data, slot);
-       //     }
-       //     None => {
-       //         let err = error::Error::Generic(format!("unimplemented RPC with cmd {}", cmd));
-       //         // FIXME: reply error
-       //         println!("error: {}", err);
-       //     }
-       // };
+        //         (cb)(ic, &data, slot);
+        //     }
+        //     None => {
+        //         let err = error::Error::Generic(format!("unimplemented RPC with cmd {}", cmd));
+        //         // FIXME: reply error
+        //         println!("error: {}", err);
+        //     }
+        // };
     }
 }
 
@@ -355,13 +352,11 @@ struct QueryState<T> {
     waker: Option<Waker>,
 }
 
-pub struct QueryFuture<T>
-{
+pub struct QueryFuture<T> {
     state: Arc<Mutex<QueryState<T>>>,
 }
 
-impl<T> Future for QueryFuture<T>
-{
+impl<T> Future for QueryFuture<T> {
     type Output = Result<T, error::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
@@ -379,10 +374,10 @@ impl<T> Future for QueryFuture<T>
 type MsgPayload<T> = Mutex<QueryState<T>>;
 
 impl<T> QueryFuture<T>
-    where T: DeserializeOwned
+where
+    T: DeserializeOwned,
 {
-    pub fn new(ic: &mut Channel, input: &[u8], cmd: i32, async_: bool) -> Self
-    {
+    pub fn new(ic: &mut Channel, input: &[u8], cmd: i32, async_: bool) -> Self {
         let msg = unsafe { sys::ic_msg_new(std::mem::size_of::<*const c_void>() as i32) };
 
         // Serialize input

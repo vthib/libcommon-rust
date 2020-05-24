@@ -23,7 +23,7 @@ macro_rules! read_integer_method {
 
             Ok(<$type>::from_le_bytes(arr))
         }
-    }
+    };
 }
 
 impl<'de> BinReader<'de> {
@@ -88,12 +88,10 @@ impl<'de> BinReader<'de> {
     pub fn get_optional_tag(&mut self, target_tag: u16) -> Result<Option<Wire>> {
         let hdr = match self.skip_upto_tag(target_tag) {
             Ok(hdr) => hdr,
-            Err(e) => {
-                match e {
-                    Error::InputTooShort => return Ok(None),
-                    _ => return Err(e),
-                }
-            }
+            Err(e) => match e {
+                Error::InputTooShort => return Ok(None),
+                _ => return Err(e),
+            },
         };
         self.current_hdr.replace(hdr);
 
@@ -429,12 +427,24 @@ mod tests {
         test(&[0x25, 0x00, 0x01], 5, Ok(256)); // BLK2 | 5, 256
         test(&[0x25, 0xFF, 0xFF], 5, Ok(65535)); // BLK2 | 5, 65536
         test(&[0x45, 0x00, 0x00, 0x01, 0x00], 5, Ok(65536)); // BLK4 | 5, 65537
-        test(&[0x45, 0xFF, 0xFF, 0xFF, 0xFF], 5, Ok(std::u32::MAX as usize));
-        test(&[0x7F, 0x00, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF], 256,
-             Ok(std::u64::MAX as usize)); // QUAD | 31, 256, U64_MAX 
+        test(
+            &[0x45, 0xFF, 0xFF, 0xFF, 0xFF],
+            5,
+            Ok(std::u32::MAX as usize),
+        );
+        test(
+            &[
+                0x7F, 0x00, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            ],
+            256,
+            Ok(std::u64::MAX as usize),
+        ); // QUAD | 31, 256, U64_MAX
 
-        test(&[0xFE, 0x80, 0xFF, 0x00, 0x00, 0x00], 128,
-             Err(Error::InvalidEncoding)); // REPEAT | 30, 128, 255
+        test(
+            &[0xFE, 0x80, 0xFF, 0x00, 0x00, 0x00],
+            128,
+            Err(Error::InvalidEncoding),
+        ); // REPEAT | 30, 128, 255
     }
 
     // symmetric of test_push_repeated_len in ser mod
@@ -452,8 +462,7 @@ mod tests {
 
         test(&[0xE0, 0x00, 0x00, 0x00, 0x00], 0, Ok(0)); // REPEAT | 0, 0
         test(&[0xFE, 0x80, 0xFF, 0x00, 0x00, 0x00], 128, Ok(255)); // REPEAT | 30, 128, 255
-        test(&[0xFF, 0x00, 0x04, 0x00, 0x08, 0x00, 0x00], 1024,
-             Ok(2048)); // REPEAT | 31, 1024, 2048
+        test(&[0xFF, 0x00, 0x04, 0x00, 0x08, 0x00, 0x00], 1024, Ok(2048)); // REPEAT | 31, 1024, 2048
 
         test(&[0x05, 0x01], 5, Err(Error::InvalidEncoding)); // BLK1 | 5, 1
     }
