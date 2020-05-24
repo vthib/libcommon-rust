@@ -2,11 +2,11 @@ use crate::error;
 use crate::ic_sync::{Channel, RpcRegister};
 use crate::msg_sync::Msg;
 use serde_iop::to_bytes;
-use serde_iop::{Deserialize, Serialize};
+use serde_iop::{DeserializeOwned, Serialize};
 
 pub trait Rpc {
-    type Input: Serialize + for<'a> Deserialize<'a>;
-    type Output: Serialize + for<'a> Deserialize<'a>;
+    type Input: Serialize + DeserializeOwned;
+    type Output: Serialize + DeserializeOwned;
 
     const TAG: u16;
     const ASYNC: bool;

@@ -2,7 +2,7 @@ use crate::error;
 use crate::msg_sync::ReplyMsg;
 use libc;
 use libcommon_sys as sys;
-use serde_iop::{from_bytes, to_bytes, Deserialize, Serialize};
+use serde_iop::{from_bytes, to_bytes, DeserializeOwned, Serialize};
 use std::collections::HashMap;
 use std::mem;
 use std::os::raw::c_void;
@@ -39,7 +39,7 @@ impl RpcRegister {
 
     pub fn register<I, O>(&mut self, cmd: i32, fun: impl Fn(I) -> Result<O, error::Error> + 'static)
     where
-        I: for<'a> Deserialize<'a>,
+        I: DeserializeOwned,
         O: Serialize,
     {
         self.impls.insert(

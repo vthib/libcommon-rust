@@ -1,7 +1,7 @@
 use crate::error;
 use libc;
 use libcommon_sys as sys;
-use serde_iop::{from_bytes, to_bytes, Deserialize, Serialize};
+use serde_iop::{from_bytes, to_bytes, Serialize, DeserializeOwned};
 use std::collections::HashMap;
 use futures::future::{Future, FutureExt};
 use std::mem;
@@ -46,7 +46,7 @@ impl RpcRegister {
         cmd: i32,
         fun: impl Fn(Channel, I) -> F + 'static,
     ) where
-        I: for<'a> Deserialize<'a>,
+        I: DeserializeOwned,
         O: Serialize + 'static,
         F: Future<Output = Result<O, error::Error>> + 'static,
     {
@@ -379,7 +379,7 @@ impl<T> Future for QueryFuture<T>
 type MsgPayload<T> = Mutex<QueryState<T>>;
 
 impl<T> QueryFuture<T>
-    where T: for<'a> Deserialize<'a>
+    where T: DeserializeOwned
 {
     pub fn new(ic: &mut Channel, input: &[u8], cmd: i32, async_: bool) -> Self
     {
